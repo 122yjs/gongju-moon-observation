@@ -2,9 +2,8 @@ import { env } from "cloudflare:workers";
 
 export interface AppEnv {
   DB: D1Database;
-  BUCKET: R2Bucket;
+  BUCKET?: R2Bucket;
   SESSION_SECRET: string;
-  CLASS_INVITE_TOKEN: string;
   ADMIN_PASSWORD_HASH: string;
   CLASS_ID?: string;
   CLASS_LABEL?: string;
@@ -12,13 +11,7 @@ export interface AppEnv {
 
 export function getEnv(): AppEnv {
   const runtime = env as unknown as Partial<AppEnv>;
-  const required = [
-    "DB",
-    "BUCKET",
-    "SESSION_SECRET",
-    "CLASS_INVITE_TOKEN",
-    "ADMIN_PASSWORD_HASH",
-  ] as const;
+  const required = ["DB", "SESSION_SECRET", "ADMIN_PASSWORD_HASH"] as const;
 
   for (const key of required) {
     if (!runtime[key]) {
@@ -29,10 +22,11 @@ export function getEnv(): AppEnv {
   return runtime as AppEnv;
 }
 
+// 기존 단일 학급 배포와의 호환을 위해 남겨 둡니다.
 export function getClassId(runtime = getEnv()) {
-  return runtime.CLASS_ID?.trim() || "gongju-4-1";
+  return runtime.CLASS_ID?.trim() || "legacy-gongju-4-1";
 }
 
 export function getClassLabel(runtime = getEnv()) {
-  return runtime.CLASS_LABEL?.trim() || "4학년 1반";
+  return runtime.CLASS_LABEL?.trim() || "우리 반";
 }

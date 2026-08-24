@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
-import { QRCodeSVG } from "qrcode.react";
 import Link from "next/link";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 
 interface Observation {
   id: string;
@@ -14,10 +14,22 @@ interface Observation {
   status: "visible" | "hidden";
   createdAt: string;
   imageUrl: string;
+  driveUrl: string;
+}
+
+interface InviteInfo {
+  joinUrl: string;
+  classLabel: string;
+  googleEmail: string;
+  googleDisplayName: string;
+  rootFolderUrl: string;
+  spreadsheetUrl: string;
+  sessionDays: number;
 }
 
 interface PageResult {
   items: Observation[];
+  total: number;
   hasMore: boolean;
   nextCursor: string | null;
   message?: string;
@@ -25,14 +37,13 @@ interface PageResult {
 
 export default function AdminPage() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
-  const [password, setPassword] = useState("");
-  const [message, setMessage] = useState("");
+  const [invite, setInvite] = useState<InviteInfo | null>(null);
   const [items, setItems] = useState<Observation[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [joinUrl, setJoinUrl] = useState("");
-  const [classLabel, setClassLabel] = useState("4학년 1반");
+  const [message, setMessage] = useState("");
+  const [classLabel, setClassLabel] = useState("우리 반");
 
   const loadData = useCallback(async (nextCursor: string | null = null, append = false) => {
     setLoading(true);
@@ -46,15 +57,15 @@ export default function AdminPage() {
         setAuthenticated(false);
         return;
       }
-      const records = (await recordsResponse.json()) as PageResult;
-      const invite = (await inviteResponse.json()) as { joinUrl?: string; classLabel?: string; message?: string };
+      const records = (await recordsResponse.json().catch(() => ({}))) as PageResult;
+      const inviteResult = (await inviteResponse.json().catch(() => ({}))) as InviteInfo & { message?: string };
       if (!recordsResponse.ok) throw new Error(records.message || "관찰 기록을 불러오지 못했습니다.");
-      if (!inviteResponse.ok) throw new Error(invite.message || "수업 링크를 불러오지 못했습니다.");
-      setItems((current) => append ? [...current, ...records.items] : records.items);
+      if (!inviteResponse.ok) throw new Error(inviteResult.message || "수업 링크를 불러오지 못했습니다.");
+      setItems((current) => (append ? [...current, ...records.items] : records.items));
       setCursor(records.nextCursor);
       setHasMore(records.hasMore);
-      setJoinUrl(invite.joinUrl || "");
-      setClassLabel(invite.classLabel || "4학년 1반");
+      setInvite(inviteResult);
+      setClassLabel(inviteResult.classLabel);
       setAuthenticated(true);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "자료를 불러오지 못했습니다.");
@@ -64,37 +75,41 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const error = query.get("error");
+    if (error) setMessage(error);
     fetch("/api/admin/session", { credentials: "same-origin" })
-      .then((response) => response.json())
-      .then((result: { authenticated?: boolean }) => {
+      .then(async (response) => {
+        const result = (await response.json()) as { authenticated?: boolean };
         const signedIn = Boolean(result.authenticated);
         setAuthenticated(signedIn);
-        if (signedIn) void loadData();
+        if (signedIn) await loadData();
       })
       .catch(() => setAuthenticated(false));
   }, [loadData]);
 
-  async function signIn(event: FormEvent<HTMLFormElement>) {
+  async function saveClassLabel(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setLoading(true);
-    setMessage("");
-    try {
-      const response = await fetch("/api/admin/session", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
-      });
-      const result = (await response.json().catch(() => ({}))) as { message?: string };
-      if (!response.ok) throw new Error(result.message || "로그인하지 못했습니다.");
-      setPassword("");
-      setAuthenticated(true);
-      await loadData();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "로그인하지 못했습니다.");
-    } finally {
-      setLoading(false);
-    }
+    const response = await fetch("/api/admin/settings", {
+      method: "PATCH",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ classLabel }),
+    });
+    const result = (await response.json().catch(() => ({}))) as { classLabel?: string; message?: string };
+    if (!response.ok) return setMessage(result.message || "학급명을 저장하지 못했습니다.");
+    setClassLabel(result.classLabel || classLabel);
+    setInvite((current) => (current ? { ...current, classLabel: result.classLabel || classLabel } : current));
+    setMessage("학급명을 저장했습니다.");
+  }
+
+  async function rotateInvite() {
+    if (!window.confirm("기존 학생 QR을 즉시 사용할 수 없게 하고 새 QR을 만들까요?")) return;
+    const response = await fetch("/api/admin/invite", { method: "POST", credentials: "same-origin" });
+    const result = (await response.json().catch(() => ({}))) as InviteInfo & { message?: string };
+    if (!response.ok) return setMessage(result.message || "새 수업 링크를 만들지 못했습니다.");
+    setInvite(result);
+    setMessage("새 학생 QR을 만들었습니다.");
   }
 
   async function updateStatus(item: Observation) {
@@ -106,24 +121,18 @@ export default function AdminPage() {
       body: JSON.stringify({ status }),
     });
     const result = (await response.json().catch(() => ({}))) as { message?: string };
-    if (!response.ok) {
-      setMessage(result.message || "공개 상태를 바꾸지 못했습니다.");
-      return;
-    }
-    setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, status } : entry));
+    if (!response.ok) return setMessage(result.message || "공개 상태를 바꾸지 못했습니다.");
+    setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, status } : entry)));
   }
 
   async function remove(item: Observation) {
-    if (!window.confirm(`${item.studentNumber}번 ${item.studentName} 학생의 기록을 완전히 삭제할까요?`)) return;
+    if (!window.confirm(`${item.studentNumber}번 ${item.studentName} 학생의 Drive 사진과 제출 행을 완전히 삭제할까요?`)) return;
     const response = await fetch(`/api/admin/observations/${item.id}`, {
       method: "DELETE",
       credentials: "same-origin",
     });
     const result = (await response.json().catch(() => ({}))) as { message?: string };
-    if (!response.ok) {
-      setMessage(result.message || "기록을 삭제하지 못했습니다.");
-      return;
-    }
+    if (!response.ok) return setMessage(result.message || "기록을 삭제하지 못했습니다.");
     setItems((current) => current.filter((entry) => entry.id !== item.id));
   }
 
@@ -131,37 +140,40 @@ export default function AdminPage() {
     await fetch("/api/admin/session", { method: "DELETE", credentials: "same-origin" });
     setAuthenticated(false);
     setItems([]);
-    setJoinUrl("");
+    setInvite(null);
+  }
+
+  async function disconnect() {
+    if (!window.confirm("중앙 서비스와 Google Drive 연결을 해제할까요? Drive의 사진과 제출 목록은 삭제되지 않습니다.")) return;
+    const response = await fetch("/api/google/disconnect", { method: "DELETE", credentials: "same-origin" });
+    const result = (await response.json().catch(() => ({}))) as { message?: string };
+    if (!response.ok) return setMessage(result.message || "연결을 해제하지 못했습니다.");
+    setAuthenticated(false);
+    setInvite(null);
+    setItems([]);
+    setMessage(result.message || "연결을 해제했습니다.");
   }
 
   if (authenticated === null) {
-    return <main className="grid min-h-screen place-items-center bg-space-950 text-amber-300">관리 화면을 준비하고 있어요…</main>;
+    return <main className="grid min-h-screen place-items-center bg-space-950 text-amber-300">교사 화면을 준비하고 있어요…</main>;
   }
 
   if (!authenticated) {
     return (
-      <main className="grid min-h-screen place-items-center bg-space-950 px-5 text-slate-100">
-        <form onSubmit={signIn} className="w-full max-w-md rounded-3xl border border-space-700 bg-space-800 p-7 shadow-card">
-          <p className="text-xs font-bold text-amber-300">교사용 관리</p>
-          <h1 className="mt-1 text-2xl font-black">관찰 기록 관리</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-400">학생 전체 이름과 사진은 교사 로그인 후에만 표시됩니다.</p>
-          <label className="mt-6 block text-sm font-bold">관리 비밀번호
-            <input
-              type="password"
-              autoComplete="current-password"
-              required
-              minLength={12}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white"
-            />
-          </label>
+      <main className="grid min-h-screen place-items-center bg-space-950 px-5 py-10 text-slate-100">
+        <section className="w-full max-w-lg rounded-3xl border border-space-700 bg-space-800 p-7 shadow-card">
+          <p className="text-xs font-bold text-amber-300">교사용 중앙 서비스</p>
+          <h1 className="mt-1 text-2xl font-black">내 Google Drive에 제출함 만들기</h1>
+          <p className="mt-4 text-sm leading-7 text-slate-300">
+            앱이 새로 만드는 수업 폴더·사진·스프레드시트만 관리합니다. 학생 사진·이름·메모는 중앙 D1이나 R2에 장기 저장하지 않습니다.
+          </p>
           {message ? <p className="mt-4 rounded-xl border border-red-400/25 bg-red-400/10 p-3 text-sm text-red-200" role="alert">{message}</p> : null}
-          <button disabled={loading} className="mt-5 w-full rounded-xl bg-amber-500 px-5 py-3 font-black text-space-950 disabled:opacity-60">
-            {loading ? "확인 중…" : "교사 로그인"}
-          </button>
+          <a href="/api/google/start" className="mt-6 flex w-full items-center justify-center rounded-xl bg-amber-500 px-5 py-3.5 font-black text-space-950 hover:bg-amber-400">
+            Google Drive 연결하기
+          </a>
           <Link href="/" className="mt-4 block text-center text-sm font-bold text-slate-400 hover:text-amber-300">학생 화면으로 돌아가기</Link>
-        </form>
+          <Link href="/operator" className="mt-3 block text-center text-xs text-slate-600 hover:text-slate-400">서비스 운영 설정</Link>
+        </section>
       </main>
     );
   }
@@ -171,71 +183,77 @@ export default function AdminPage() {
       <div className="mx-auto max-w-6xl space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-bold text-amber-300">교사용 관리 · {classLabel}</p>
-            <h1 className="mt-1 text-2xl font-black">달 관찰 기록</h1>
+            <p className="text-xs font-bold text-amber-300">교사용 관리 · {invite?.classLabel || classLabel}</p>
+            <h1 className="mt-1 text-2xl font-black">Google Drive 달 관찰 제출함</h1>
+            <p className="mt-1 text-xs text-slate-500">{invite?.googleDisplayName} {invite?.googleEmail ? `· ${invite.googleEmail}` : ""}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link href="/" className="rounded-xl border border-space-600 bg-space-800 px-4 py-2 text-sm font-bold">학생 화면</Link>
             <button onClick={signOut} className="rounded-xl border border-space-600 bg-space-800 px-4 py-2 text-sm font-bold">로그아웃</button>
+            <button onClick={disconnect} className="rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-200">Drive 연결 해제</button>
           </div>
         </header>
 
-        {joinUrl ? (
-          <section className="grid gap-5 rounded-3xl border border-blue-400/20 bg-space-800 p-5 shadow-card sm:grid-cols-[180px_1fr] sm:p-6">
-            <div className="mx-auto rounded-2xl bg-white p-3">
-              <QRCodeSVG value={joinUrl} size={156} level="M" title={`${classLabel} 수업 참여 QR`} />
-            </div>
-            <div className="min-w-0 self-center">
-              <p className="text-xs font-bold text-blue-300">학생 수업 참여 QR</p>
-              <h2 className="mt-1 text-xl font-black">학생에게 이 QR만 안내하세요</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-400">QR을 촬영하면 계정 로그인 없이 이 기기에서 60일 동안 제출과 갤러리를 이용할 수 있습니다.</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button onClick={() => navigator.clipboard.writeText(joinUrl)} className="rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-black text-white">참여 링크 복사</button>
-                <a href={joinUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-space-600 px-4 py-2.5 text-sm font-bold">링크 확인</a>
-              </div>
-            </div>
-          </section>
-        ) : null}
+        {message ? <p className="rounded-xl border border-blue-400/25 bg-blue-400/10 p-3 text-sm text-blue-100" role="status">{message}</p> : null}
 
-        <section className="rounded-3xl border border-space-700 bg-space-800 p-5 shadow-card sm:p-6">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-xs font-bold text-amber-300">전체 이름은 이 화면에서만 확인됩니다</p>
-              <h2 className="mt-1 text-xl font-black">제출된 기록 {items.length}건</h2>
+        <section className="grid gap-5 lg:grid-cols-[360px_1fr]">
+          <article className="rounded-3xl border border-space-700 bg-space-800 p-5 shadow-card">
+            <h2 className="text-lg font-black">학생용 QR</h2>
+            <p className="mt-2 text-xs leading-5 text-slate-400">한 번 입장한 기기는 {invite?.sessionDays || 60}일 동안 제출할 수 있습니다.</p>
+            {invite?.joinUrl ? (
+              <div className="mt-5 rounded-2xl bg-white p-4 text-center">
+                <QRCodeSVG value={invite.joinUrl} size={260} className="mx-auto h-auto max-w-full" />
+              </div>
+            ) : null}
+            <button onClick={rotateInvite} className="mt-4 w-full rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-sm font-black text-amber-200">새 QR 만들기</button>
+          </article>
+
+          <article className="rounded-3xl border border-space-700 bg-space-800 p-5 shadow-card">
+            <h2 className="text-lg font-black">저장 위치와 학급 설정</h2>
+            <p className="mt-2 rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm leading-6 text-emerald-100">
+              학생 원본 자료는 교사 소유 Google Drive에만 장기 보관됩니다.
+            </p>
+            <form onSubmit={saveClassLabel} className="mt-5 flex flex-col gap-2 sm:flex-row">
+              <input value={classLabel} onChange={(event: ChangeEvent<HTMLInputElement>) => setClassLabel(event.target.value)} maxLength={40} required className="min-w-0 flex-1 rounded-xl border border-space-600 bg-space-900 px-4 py-3" aria-label="학급명" />
+              <button className="rounded-xl bg-amber-500 px-5 py-3 font-black text-space-950">학급명 저장</button>
+            </form>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <a href={invite?.rootFolderUrl || "#"} target="_blank" rel="noreferrer" className="rounded-xl border border-space-600 bg-space-900 p-4 font-bold hover:border-amber-400">Google Drive 폴더 열기</a>
+              <a href={invite?.spreadsheetUrl || "#"} target="_blank" rel="noreferrer" className="rounded-xl border border-space-600 bg-space-900 p-4 font-bold hover:border-amber-400">제출 목록 열기</a>
             </div>
-            <button onClick={() => loadData()} disabled={loading} className="rounded-xl border border-space-600 px-4 py-2 text-sm font-bold disabled:opacity-60">↻ 새로고침</button>
+          </article>
+        </section>
+
+        <section>
+          <div className="mb-4 flex items-end justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold text-amber-300">교사 Drive에서 실시간 조회</p>
+              <h2 className="mt-1 text-2xl font-black">관찰 기록 {items.length ? `(${items.length}${hasMore ? "+" : ""})` : ""}</h2>
+            </div>
+            <button onClick={() => void loadData()} disabled={loading} className="rounded-xl border border-space-600 bg-space-800 px-4 py-2.5 text-sm font-bold disabled:opacity-50">↻ 새로고침</button>
           </div>
-          {message ? <p className="mt-4 rounded-xl border border-red-400/25 bg-red-400/10 p-3 text-sm text-red-200" role="alert">{message}</p> : null}
-          {items.length === 0 && !loading ? <p className="mt-8 text-center text-sm text-slate-400">아직 제출된 기록이 없습니다.</p> : null}
-          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {!loading && items.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-space-600 bg-space-800/60 py-16 text-center text-slate-400">아직 제출된 사진이 없습니다.</div>
+          ) : null}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((item) => (
-              <article key={item.id} className={`overflow-hidden rounded-2xl border bg-space-900 ${item.status === "visible" ? "border-space-600" : "border-red-400/30 opacity-70"}`}>
+              <article key={item.id} className={`overflow-hidden rounded-2xl border bg-space-800 shadow-card ${item.status === "hidden" ? "border-red-400/30 opacity-70" : "border-space-700"}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={item.imageUrl} alt={`${item.studentNumber}번 ${item.studentName} 학생의 달 관찰 사진`} className="h-48 w-full object-cover" loading="lazy" />
+                <img src={item.imageUrl} alt={`${item.studentNumber}번 ${item.studentName} 달 관찰 사진`} className="h-56 w-full bg-space-900 object-cover" />
                 <div className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="font-black">{item.studentNumber}번 {item.studentName}</h3>
-                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${item.status === "visible" ? "bg-emerald-400/10 text-emerald-300" : "bg-red-400/10 text-red-300"}`}>
-                      {item.status === "visible" ? "공개" : "숨김"}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-slate-400">관찰 {item.observedAt.replace("T", " ")}</p>
-                  {item.memo ? <p className="mt-3 rounded-xl bg-space-800 p-3 text-sm leading-6 text-slate-300">{item.memo}</p> : null}
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    <button onClick={() => updateStatus(item)} className="rounded-xl border border-space-600 px-3 py-2 text-sm font-bold">
-                      {item.status === "visible" ? "갤러리에서 숨김" : "다시 공개"}
-                    </button>
-                    <button onClick={() => remove(item)} className="rounded-xl border border-red-400/30 px-3 py-2 text-sm font-bold text-red-300">완전 삭제</button>
+                  <div className="flex items-center justify-between gap-2"><h3 className="font-black">{item.studentNumber}번 {item.studentName}</h3><span className="text-xs text-slate-500">{Math.ceil(item.imageBytes / 1024)}KB</span></div>
+                  <p className="mt-2 text-xs text-slate-400">{item.observedAt.replace("T", " ")}</p>
+                  {item.memo ? <p className="mt-3 rounded-xl bg-space-900 p-3 text-sm leading-6 text-slate-300">{item.memo}</p> : null}
+                  <div className="mt-4 grid grid-cols-3 gap-2 text-xs font-bold">
+                    <button onClick={() => void updateStatus(item)} className="rounded-lg border border-space-600 px-2 py-2">{item.status === "visible" ? "숨기기" : "공개"}</button>
+                    <a href={item.driveUrl || invite?.rootFolderUrl || "#"} target="_blank" rel="noreferrer" className="rounded-lg border border-space-600 px-2 py-2 text-center">Drive</a>
+                    <button onClick={() => void remove(item)} className="rounded-lg border border-red-400/25 bg-red-400/10 px-2 py-2 text-red-200">삭제</button>
                   </div>
                 </div>
               </article>
             ))}
           </div>
-          {hasMore && cursor ? (
-            <div className="mt-6 text-center">
-              <button onClick={() => loadData(cursor, true)} disabled={loading} className="rounded-xl bg-amber-500 px-5 py-3 font-black text-space-950 disabled:opacity-60">기록 더 보기</button>
-            </div>
-          ) : null}
+          {hasMore ? <div className="mt-5 text-center"><button onClick={() => void loadData(cursor, true)} disabled={loading} className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-6 py-3 font-black text-amber-200">기록 더 보기</button></div> : null}
         </section>
       </div>
     </main>

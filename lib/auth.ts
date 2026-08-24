@@ -1,55 +1,32 @@
-import { getClassId, getEnv } from "./runtime";
+import { randomToken, safeSecretEqual, sha256Hex, toBase64Url, fromBase64Url } from "./crypto";
+import { getEnv } from "./runtime";
 
 const STUDENT_COOKIE = "moon_class_session";
-const ADMIN_COOKIE = "moon_admin_session";
+const TEACHER_COOKIE = "moon_teacher_session";
+const OPERATOR_COOKIE = "moon_operator_session";
+const OAUTH_STATE_COOKIE = "moon_google_oauth_state";
 const STUDENT_SESSION_MAX_AGE = 60 * 24 * 60 * 60;
+const TEACHER_SESSION_MAX_AGE = 30 * 24 * 60 * 60;
+const OPERATOR_SESSION_MAX_AGE = 12 * 60 * 60;
+const OAUTH_STATE_MAX_AGE = 10 * 60;
 const encoder = new TextEncoder();
 
 export interface SessionPayload {
-  role: "student" | "admin";
-  classId: string;
+  role: "student" | "teacher" | "operator";
+  teacherId?: string;
   sid: string;
   exp: number;
 }
 
-function toBase64Url(bytes: Uint8Array) {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-function fromBase64Url(value: string) {
-  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
-  const binary = atob(padded);
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
-}
-
 async function hmac(value: string) {
-  const runtime = getEnv();
   const key = await crypto.subtle.importKey(
     "raw",
-    encoder.encode(runtime.SESSION_SECRET),
+    encoder.encode(getEnv().SESSION_SECRET),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
   );
   return new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(value)));
-}
-
-export async function sha256Hex(value: string) {
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value)));
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-export async function safeSecretEqual(left: string, right: string) {
-  const [leftHash, rightHash] = await Promise.all([sha256Hex(left), sha256Hex(right)]);
-  let mismatch = leftHash.length ^ rightHash.length;
-  const length = Math.max(leftHash.length, rightHash.length);
-  for (let index = 0; index < length; index += 1) {
-    mismatch |= (leftHash.charCodeAt(index) || 0) ^ (rightHash.charCodeAt(index) || 0);
-  }
-  return mismatch === 0;
 }
 
 async function signSession(payload: SessionPayload) {
@@ -69,10 +46,10 @@ async function verifySession(value: string | null, role: SessionPayload["role"])
     const payload = JSON.parse(new TextDecoder().decode(fromBase64Url(encoded))) as SessionPayload;
     if (
       payload.role !== role ||
-      payload.classId !== getClassId() ||
       !payload.sid ||
       !Number.isFinite(payload.exp) ||
-      payload.exp <= Math.floor(Date.now() / 1000)
+      payload.exp <= Math.floor(Date.now() / 1000) ||
+      ((role === "student" || role === "teacher") && !payload.teacherId)
     ) {
       return null;
     }
@@ -91,48 +68,96 @@ function readCookie(request: Request, name: string) {
   return null;
 }
 
-function cookie(name: string, value: string, maxAge: number) {
-  return `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax`;
+function cookie(
+  name: string,
+  value: string,
+  maxAge: number,
+  options: { path?: string; sameSite?: "Lax" | "Strict" } = {},
+) {
+  return `${name}=${encodeURIComponent(value)}; Path=${options.path || "/"}; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=${options.sameSite || "Lax"}`;
 }
 
-export async function createStudentCookie() {
-  const maxAge = STUDENT_SESSION_MAX_AGE;
+export async function createStudentCookie(teacherId: string) {
   const value = await signSession({
     role: "student",
-    classId: getClassId(),
+    teacherId,
     sid: crypto.randomUUID(),
-    exp: Math.floor(Date.now() / 1000) + maxAge,
+    exp: Math.floor(Date.now() / 1000) + STUDENT_SESSION_MAX_AGE,
   });
-  return cookie(STUDENT_COOKIE, value, maxAge);
+  return cookie(STUDENT_COOKIE, value, STUDENT_SESSION_MAX_AGE);
 }
 
-export async function createAdminCookie() {
-  const maxAge = 12 * 60 * 60;
+export async function createTeacherCookie(teacherId: string) {
   const value = await signSession({
-    role: "admin",
-    classId: getClassId(),
+    role: "teacher",
+    teacherId,
     sid: crypto.randomUUID(),
-    exp: Math.floor(Date.now() / 1000) + maxAge,
+    exp: Math.floor(Date.now() / 1000) + TEACHER_SESSION_MAX_AGE,
   });
-  return cookie(ADMIN_COOKIE, value, maxAge);
+  return cookie(TEACHER_COOKIE, value, TEACHER_SESSION_MAX_AGE);
+}
+
+export async function createOperatorCookie() {
+  const value = await signSession({
+    role: "operator",
+    sid: crypto.randomUUID(),
+    exp: Math.floor(Date.now() / 1000) + OPERATOR_SESSION_MAX_AGE,
+  });
+  return cookie(OPERATOR_COOKIE, value, OPERATOR_SESSION_MAX_AGE);
+}
+
+export function createOAuthStateCookie() {
+  const state = randomToken(32);
+  return {
+    state,
+    cookie: cookie(OAUTH_STATE_COOKIE, state, OAUTH_STATE_MAX_AGE, {
+      path: "/api/google/callback",
+      sameSite: "Lax",
+    }),
+  };
 }
 
 export function clearStudentCookie() {
   return cookie(STUDENT_COOKIE, "", 0);
 }
 
-export function clearAdminCookie() {
-  return cookie(ADMIN_COOKIE, "", 0);
+export function clearTeacherCookie() {
+  return cookie(TEACHER_COOKIE, "", 0);
+}
+
+export function clearOperatorCookie() {
+  return cookie(OPERATOR_COOKIE, "", 0);
+}
+
+export function clearOAuthStateCookie() {
+  return cookie(OAUTH_STATE_COOKIE, "", 0, { path: "/api/google/callback" });
 }
 
 export function getStudentSession(request: Request) {
   return verifySession(readCookie(request, STUDENT_COOKIE), "student");
 }
 
-export function getAdminSession(request: Request) {
-  return verifySession(readCookie(request, ADMIN_COOKIE), "admin");
+export function getTeacherSession(request: Request) {
+  return verifySession(readCookie(request, TEACHER_COOKIE), "teacher");
+}
+
+export function getOperatorSession(request: Request) {
+  return verifySession(readCookie(request, OPERATOR_COOKIE), "operator");
+}
+
+export function getOAuthState(request: Request) {
+  return readCookie(request, OAUTH_STATE_COOKIE);
 }
 
 export async function getViewerSession(request: Request) {
-  return (await getAdminSession(request)) || (await getStudentSession(request));
+  return (await getTeacherSession(request)) || (await getStudentSession(request));
 }
+
+// 기존 파일에서 사용하던 이름을 유지합니다.
+export const getAdminSession = getTeacherSession;
+export const clearAdminCookie = clearTeacherCookie;
+export function createAdminCookie(teacherId: string) {
+  return createTeacherCookie(teacherId);
+}
+
+export { safeSecretEqual, sha256Hex };

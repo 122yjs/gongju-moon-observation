@@ -1,41 +1,50 @@
-import { getAdminSession } from "../../../../../lib/auth";
+import { getTeacherSession } from "../../../../../lib/auth";
+import {
+  deleteObservation,
+  findObservationRow,
+  getTeacherAccessToken,
+  updateObservationStatus,
+} from "../../../../../lib/google-drive";
 import { assertSameOrigin, errorResponse, HttpError, json } from "../../../../../lib/http";
-import { getClassId, getEnv } from "../../../../../lib/runtime";
+import {
+  deleteImageTicket,
+  getTeacherById,
+  seedImageTickets,
+} from "../../../../../lib/tenant";
 
-interface ManagedRow {
-  image_key: string;
-  status: string;
-}
-
-async function getManagedObservation(id: string) {
-  const runtime = getEnv();
-  const row = await runtime.DB.prepare(
-    "SELECT image_key, status FROM observations WHERE id = ? AND class_id = ? LIMIT 1",
-  )
-    .bind(id, getClassId(runtime))
-    .first<ManagedRow>();
-  if (!row) throw new HttpError(404, "관찰 기록을 찾을 수 없습니다.");
-  return { runtime, row };
+async function contextFor(request: Request, id: string) {
+  const session = await getTeacherSession(request);
+  if (!session?.teacherId) throw new HttpError(401, "교사 로그인이 필요합니다.");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new HttpError(404, "관찰 기록을 찾을 수 없습니다.");
+  const teacher = await getTeacherById(session.teacherId);
+  if (!teacher) throw new HttpError(401, "Google Drive를 다시 연결해 주세요.");
+  const accessToken = await getTeacherAccessToken(teacher);
+  const observation = await findObservationRow(accessToken, teacher, id);
+  if (!observation) throw new HttpError(404, "관찰 기록을 찾을 수 없습니다.");
+  return { teacher, accessToken, observation };
 }
 
 export async function PATCH(
   request: Request,
-  context: { params: Promise<{ id: string }> },
+  routeContext: { params: Promise<{ id: string }> },
 ) {
   try {
     assertSameOrigin(request);
-    if (!(await getAdminSession(request))) throw new HttpError(401, "교사 로그인이 필요합니다.");
-    const { id } = await context.params;
+    const { id } = await routeContext.params;
     const payload = (await request.json()) as { status?: unknown };
     if (payload.status !== "visible" && payload.status !== "hidden") {
       throw new HttpError(400, "공개 상태 값이 올바르지 않습니다.");
     }
-    const { runtime } = await getManagedObservation(id);
-    await runtime.DB.prepare(
-      "UPDATE observations SET status = ? WHERE id = ? AND class_id = ?",
-    )
-      .bind(payload.status, id, getClassId(runtime))
-      .run();
+    const { teacher, accessToken, observation } = await contextFor(request, id);
+    await updateObservationStatus(accessToken, teacher, observation, payload.status);
+    await seedImageTickets(teacher.id, [
+      {
+        observationId: observation.id,
+        fileId: observation.imageFileId,
+        imageType: observation.imageType,
+        status: payload.status,
+      },
+    ]);
     return json({ ok: true, status: payload.status });
   } catch (error) {
     return errorResponse(error);
@@ -44,23 +53,14 @@ export async function PATCH(
 
 export async function DELETE(
   request: Request,
-  context: { params: Promise<{ id: string }> },
+  routeContext: { params: Promise<{ id: string }> },
 ) {
   try {
     assertSameOrigin(request);
-    if (!(await getAdminSession(request))) throw new HttpError(401, "교사 로그인이 필요합니다.");
-    const { id } = await context.params;
-    const { runtime, row } = await getManagedObservation(id);
-
-    await runtime.DB.prepare(
-      "UPDATE observations SET status = 'hidden' WHERE id = ? AND class_id = ?",
-    )
-      .bind(id, getClassId(runtime))
-      .run();
-    await runtime.BUCKET.delete(row.image_key);
-    await runtime.DB.prepare("DELETE FROM observations WHERE id = ? AND class_id = ?")
-      .bind(id, getClassId(runtime))
-      .run();
+    const { id } = await routeContext.params;
+    const { teacher, accessToken, observation } = await contextFor(request, id);
+    await deleteObservation(accessToken, teacher, observation);
+    await deleteImageTicket(observation.id, teacher.id);
     return json({ ok: true });
   } catch (error) {
     return errorResponse(error);

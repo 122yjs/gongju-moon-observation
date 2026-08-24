@@ -11,41 +11,47 @@ test("builds the moon observation app without external runtime CSS", async () =>
   assert.doesNotMatch(html, /cdn\.tailwindcss\.com|fonts\.googleapis\.com|google\.script\.run/);
 });
 
-test("keeps restricted routes behind server-side session checks", async () => {
-  const observations = await readFile(new URL("../app/api/observations/route.ts", import.meta.url), "utf8");
-  const images = await readFile(new URL("../app/api/images/[id]/route.ts", import.meta.url), "utf8");
-  const worker = await readFile(new URL("../worker/index.ts", import.meta.url), "utf8");
-  assert.match(observations, /getStudentSession\(request\)/);
-  assert.match(observations, /throw new HttpError\(401/);
-  assert.match(images, /getViewerSession|getAdminSession/);
-  assert.match(images, /status !== "visible"/);
-  assert.match(worker, /X-Robots-Tag/);
-  assert.match(worker, /Referrer-Policy/);
-  assert.match(worker, /Content-Security-Policy/);
+test("requests only the non-sensitive drive.file OAuth scope", async () => {
+  const google = await readFile(new URL("../lib/google-drive.ts", import.meta.url), "utf8");
+  assert.match(google, /DRIVE_FILE_SCOPE = "https:\/\/www\.googleapis\.com\/auth\/drive\.file"/);
+  assert.match(google, /url\.searchParams\.set\("scope", DRIVE_FILE_SCOPE\)/);
+  assert.doesNotMatch(google, /auth\/drive["']/);
+  assert.doesNotMatch(google, /auth\/spreadsheets["']|openid|auth\/userinfo|gmail/);
 });
 
-test("uses Blob multipart upload and lazy gallery loading", async () => {
-  const source = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
-  assert.match(source, /canvas\.toBlob\(/);
-  assert.match(source, /new FormData\(\)/);
-  assert.match(source, /formData\.append\('photo', compressedImageBlob/);
-  assert.match(source, /imageUrl/);
-  assert.doesNotMatch(source, /toDataURL\(|imageData|google\.script\.run/);
-  assert.doesNotMatch(source, /renderCalendar\(\);\s*refreshGallery\(\);/);
+test("stores new student submissions only in teacher Drive and Sheets", async () => {
+  const route = await readFile(new URL("../app/api/observations/route.ts", import.meta.url), "utf8");
+  const drive = await readFile(new URL("../lib/google-drive.ts", import.meta.url), "utf8");
+  assert.match(route, /uploadObservationPhoto\(/);
+  assert.match(route, /appendObservationRow\(/);
+  assert.match(drive, /www\.googleapis\.com\/upload\/drive\/v3/);
+  assert.match(drive, /sheets\.googleapis\.com\/v4/);
+  assert.doesNotMatch(route, /BUCKET\.put|INSERT INTO observations|db\.add\(/);
 });
 
-test("keeps student QR sessions available for the full observation period", async () => {
+test("keeps student PII out of long-lived central D1 tables", async () => {
+  const migration = await readFile(new URL("../drizzle/0001_drive_oauth.sql", import.meta.url), "utf8");
+  assert.match(migration, /CREATE TABLE `teacher_connections`/);
+  assert.match(migration, /CREATE TABLE `submission_receipts`/);
+  assert.match(migration, /CREATE TABLE `image_tickets`/);
+  assert.doesNotMatch(migration, /student_name|student_number|observed_at|\bmemo\b|image_bytes/);
+});
+
+test("protects OAuth and class sessions and keeps the student session for 60 days", async () => {
   const auth = await readFile(new URL("../lib/auth.ts", import.meta.url), "utf8");
-  const admin = await readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8");
+  const start = await readFile(new URL("../app/api/google/start/route.ts", import.meta.url), "utf8");
+  const callback = await readFile(new URL("../app/api/google/callback/route.ts", import.meta.url), "utf8");
   assert.match(auth, /STUDENT_SESSION_MAX_AGE = 60 \* 24 \* 60 \* 60/);
-  assert.match(admin, /60일 동안 제출과 갤러리를 이용/);
+  assert.match(auth, /HttpOnly; Secure; SameSite=/);
+  assert.match(start, /createOAuthStateCookie/);
+  assert.match(callback, /safeSecretEqual\(expectedState, state\)/);
 });
 
-test("ships D1 and R2 bindings with a migration", async () => {
-  const hosting = JSON.parse(await readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"));
-  const migration = await readFile(new URL("../drizzle/0000_glossy_nomad.sql", import.meta.url), "utf8");
-  assert.equal(hosting.d1, "DB");
-  assert.equal(hosting.r2, "BUCKET");
-  assert.match(migration, /CREATE TABLE `observations`/);
-  assert.match(migration, /UNIQUE INDEX `observations_request_id_unique`/);
+test("supports operator-controlled deletion of legacy D1 and R2 student data", async () => {
+  const legacy = await readFile(new URL("../lib/legacy.ts", import.meta.url), "utf8");
+  const operator = await readFile(new URL("../app/api/operator/legacy-data/route.ts", import.meta.url), "utf8");
+  assert.match(legacy, /DELETE FROM observations/);
+  assert.match(legacy, /BUCKET\.delete/);
+  assert.match(operator, /getOperatorSession/);
+  assert.match(operator, /assertSameOrigin/);
 });

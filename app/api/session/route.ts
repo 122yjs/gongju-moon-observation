@@ -3,17 +3,23 @@ import {
   createStudentCookie,
   getStudentSession,
   safeSecretEqual,
+  sha256Hex,
 } from "../../../lib/auth";
 import { assertSameOrigin, errorResponse, HttpError, json } from "../../../lib/http";
-import { getClassLabel, getEnv } from "../../../lib/runtime";
+import { getTeacherById, getTeacherByInviteHash } from "../../../lib/tenant";
 
 export async function GET(request: Request) {
   try {
     const session = await getStudentSession(request);
-    return json({
-      authenticated: Boolean(session),
-      classLabel: session ? getClassLabel() : null,
-    });
+    if (!session?.teacherId) return json({ authenticated: false, classLabel: null });
+    const teacher = await getTeacherById(session.teacherId);
+    if (!teacher) {
+      return json(
+        { authenticated: false, classLabel: null },
+        { headers: { "Set-Cookie": clearStudentCookie() } },
+      );
+    }
+    return json({ authenticated: true, classLabel: teacher.classLabel });
   } catch (error) {
     return errorResponse(error);
   }
@@ -26,13 +32,14 @@ export async function POST(request: Request) {
     if (typeof payload.token !== "string" || payload.token.length < 32 || payload.token.length > 256) {
       throw new HttpError(401, "유효하지 않거나 만료된 수업 참여 링크입니다.");
     }
-    if (!(await safeSecretEqual(payload.token, getEnv().CLASS_INVITE_TOKEN))) {
+    const hash = await sha256Hex(payload.token);
+    const teacher = await getTeacherByInviteHash(hash);
+    if (!teacher || !(await safeSecretEqual(hash, teacher.inviteTokenHash))) {
       throw new HttpError(401, "유효하지 않거나 만료된 수업 참여 링크입니다.");
     }
-
     return json(
-      { ok: true, classLabel: getClassLabel() },
-      { headers: { "Set-Cookie": await createStudentCookie() } },
+      { ok: true, classLabel: teacher.classLabel },
+      { headers: { "Set-Cookie": await createStudentCookie(teacher.id) } },
     );
   } catch (error) {
     return errorResponse(error);

@@ -1,42 +1,91 @@
-# 공주 달 관찰 탐험대
+# 공주 달 관찰 탐험대 — 교사 Google Drive형
 
-공주시 초등학교 4학년 과학 수업용 달 관찰 웹앱입니다. 학생은 계정을 만들지 않고 교사가 제공한 긴 수업 참여 링크(QR)로 입장하며, 달 모양과 관찰 가능 시간을 확인하고 사진·관찰 기록을 제출할 수 있습니다.
+공주시 초등 과학 수업용 달 관찰 중앙 서비스입니다. 교사는 별도 서버를 배포하지 않고 Google 계정을 한 번 연결합니다. 학생은 교사가 발급한 QR로 입장하여 로그인 없이 사진과 관찰 기록을 제출합니다.
 
-## 구성
+## 저장 구조
 
-- `public/index.html`: 기존 디자인을 유지한 학생용 정적 화면
-- `app/join`: 수업 참여 토큰을 HttpOnly 세션 쿠키로 교환
-- `app/admin`: 교사용 QR·관찰 기록 관리 화면
-- `app/api`: 세션, 제출, 갤러리, 보호된 이미지, 교사용 관리 API
-- D1 `DB`: 학생 번호·이름·관찰 시각·메모·상태 등 메타데이터
-- R2 `BUCKET`: 이름이 포함되지 않은 UUID 경로의 사진 파일
+```text
+학생 브라우저
+  └─ 중앙 Worker API
+       ├─ 교사 Google Drive / 관찰 사진
+       ├─ 교사 Google Sheets / 제출 목록
+       └─ 중앙 D1 / 교사 연결정보와 짧은 임시 식별표만
+```
 
-## 개인정보·안전 설계
+새 제출의 학생 사진·번호·이름·관찰 시각·메모는 중앙 D1/R2에 장기 저장하지 않습니다. 제출 처리 중 서버 메모리를 통과한 뒤 교사 소유 Drive와 Sheets에만 기록됩니다.
 
-- 학생 계정 및 이메일 로그인 없음
-- 제출·갤러리·사진 조회는 유효한 수업 세션 필요
-- 학생 갤러리에는 마스킹 이름만 반환
-- 사진은 비공개 R2에서 Worker를 통해서만 전달
-- 업로드 MIME·매직바이트·크기·번호·이름·시각·메모를 서버에서 재검증
-- 서버 저장 전 JPEG·PNG·WebP의 EXIF·위치·텍스트 메타데이터 제거
-- 기기 세션당 10분 3회, 학급당 1시간 100회 제출 제한
-- 요청 UUID 고유 제약으로 중복 저장 방지
-- 검색엔진 차단, no-store, no-referrer, nosniff 보안 헤더 적용
+중앙 D1에는 다음만 남습니다.
 
-## 환경 값
+- 교사 Google 계정 표시정보
+- AES-GCM으로 암호화한 refresh/access token
+- 앱이 만든 Drive 폴더·사진 폴더·스프레드시트 ID
+- 학급명과 학생 초대 토큰
+- 학생 PII가 없는 24시간 중복 방지표
+- 학생 PII가 없는 1시간 속도 제한표
+- 학생 PII가 없는 30분 이미지 전달표
 
-배포 환경에는 다음 값을 설정해야 합니다. 실제 값은 소스에 커밋하지 않습니다.
+## Google 권한
 
-- `SESSION_SECRET`: 세션 서명용 32바이트 이상의 무작위 값
-- `CLASS_INVITE_TOKEN`: 학생 참여 링크에 사용하는 128비트 이상의 무작위 값
-- `ADMIN_PASSWORD_HASH`: 교사용 비밀번호의 SHA-256 해시
-- `CLASS_ID`: 내부 학급 식별자(기본값 `gongju-4-1`)
-- `CLASS_LABEL`: 화면 표시용 학급명(기본값 `4학년 1반`)
+요청하는 OAuth scope는 정확히 하나입니다.
+
+```text
+https://www.googleapis.com/auth/drive.file
+```
+
+Drive 전체 권한, Drive 읽기 전용 권한, Sheets 전체 권한, Gmail 권한, OpenID·프로필·이메일 scope를 요청하지 않습니다. 앱이 직접 만든 폴더·사진·스프레드시트만 관리합니다.
+
+## 운영자 최초 설정
+
+1. 배포 주소의 `/operator`에 기존 `ADMIN_PASSWORD_HASH`의 원문 비밀번호로 로그인합니다.
+2. Google Cloud 프로젝트에서 Google Drive API와 Google Sheets API를 활성화합니다.
+3. OAuth 동의 화면에 `drive.file`만 등록하고 개인정보처리방침 URL `/privacy`를 설정합니다.
+4. OAuth 클라이언트 유형을 **웹 애플리케이션**으로 만듭니다.
+5. `/operator`에 표시되는 `/api/google/callback` 전체 주소를 승인된 리디렉션 URI로 등록합니다.
+6. 클라이언트 ID와 클라이언트 보안 비밀번호를 `/operator`에 저장합니다.
+7. 전환 전 D1/R2 학생자료가 있다면 같은 화면에서 한 번 영구 삭제합니다.
+
+OAuth 클라이언트 보안 비밀번호는 `SESSION_SECRET`에서 파생한 키로 암호화되어 D1에 저장됩니다. 실제 값은 GitHub에 커밋하지 않습니다.
+
+## 교사 사용 순서
+
+1. `/admin`에서 **Google Drive 연결하기**를 누릅니다.
+2. Google 동의 화면에서 앱 전용 파일 권한을 승인합니다.
+3. 교사 Drive에 다음 구조가 자동 생성됩니다.
+
+```text
+달 관찰 탐험대/
+├─ 관찰 사진/
+└─ 달 관찰 제출 기록 (Google Sheets)
+```
+
+4. 관리 화면에서 학급명을 입력하고 학생 QR을 인쇄합니다.
+5. 제출 기록은 관리 화면 또는 교사 Drive/Sheets에서 확인합니다.
+6. 연결 해제 시 중앙 토큰과 교사 설정은 삭제되며 Drive 자료는 교사에게 남습니다.
+
+## 주요 경로
+
+- `/` 학생 달 관찰 화면
+- `/join?t=...` 학생 QR 입장
+- `/admin` 교사 Google Drive 연결·QR·제출 관리
+- `/operator` 중앙 서비스 OAuth 설정·이전 중앙자료 삭제
+- `/privacy` 개인정보 처리 안내
+- `/data-deletion` 연결 및 자료 삭제 안내
+- `/api/health` D1 migration과 OAuth 설정 상태 확인
 
 ## 개발 명령
 
-- `npm run build:static`: Tailwind Play CDN 없이 학생 화면용 `public/app.css` 생성
-- `npm run db:generate`: D1 마이그레이션 생성
+- `npm run build:static`: 학생 화면용 Tailwind CSS 생성
 - `npm run lint`: 정적 검사
-- `npm run build`: 정적 CSS와 Cloudflare Worker/Vinext 빌드
-- `npm test`: 빌드 후 공개 화면·인증 차단·Blob 업로드 회귀 검사
+- `npm run build`: vinext/Cloudflare Worker 빌드
+- `npm test`: 빌드 후 Drive OAuth·중앙 비저장 회귀 검사
+- `npm run db:generate`: Drizzle migration 생성
+
+## 배포 환경
+
+필수 바인딩·설정:
+
+- D1 `DB`
+- `SESSION_SECRET`: 세션 서명과 OAuth 토큰 암호화용 32바이트 이상 무작위 값
+- `ADMIN_PASSWORD_HASH`: `/operator` 로그인 비밀번호 SHA-256 해시
+
+이전 중앙 자료 정리 기능 때문에 기존 R2 `BUCKET` 바인딩은 전환 기간에만 유지합니다. 새 제출 코드는 R2에 쓰지 않습니다.

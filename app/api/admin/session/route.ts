@@ -1,45 +1,41 @@
-import {
-  clearAdminCookie,
-  createAdminCookie,
-  getAdminSession,
-  safeSecretEqual,
-  sha256Hex,
-} from "../../../../lib/auth";
-import { assertSameOrigin, errorResponse, HttpError, json } from "../../../../lib/http";
-import { getEnv } from "../../../../lib/runtime";
+import { clearTeacherCookie, getTeacherSession } from "../../../../lib/auth";
+import { assertSameOrigin, errorResponse, json } from "../../../../lib/http";
+import { getTeacherById } from "../../../../lib/tenant";
 
 export async function GET(request: Request) {
   try {
-    return json({ authenticated: Boolean(await getAdminSession(request)) });
+    const session = await getTeacherSession(request);
+    const teacher = session?.teacherId ? await getTeacherById(session.teacherId) : null;
+    if (!teacher) {
+      return json(
+        { authenticated: false },
+        session ? { headers: { "Set-Cookie": clearTeacherCookie() } } : {},
+      );
+    }
+    return json({
+      authenticated: true,
+      teacher: {
+        displayName: teacher.googleDisplayName,
+        email: teacher.googleEmail,
+        classLabel: teacher.classLabel,
+      },
+    });
   } catch (error) {
     return errorResponse(error);
   }
 }
 
-export async function POST(request: Request) {
-  try {
-    assertSameOrigin(request);
-    const payload = (await request.json()) as { password?: unknown };
-    if (typeof payload.password !== "string" || payload.password.length < 12 || payload.password.length > 256) {
-      throw new HttpError(401, "관리 비밀번호가 올바르지 않습니다.");
-    }
-    const submittedHash = await sha256Hex(payload.password);
-    if (!(await safeSecretEqual(submittedHash, getEnv().ADMIN_PASSWORD_HASH))) {
-      throw new HttpError(401, "관리 비밀번호가 올바르지 않습니다.");
-    }
-    return json(
-      { ok: true },
-      { headers: { "Set-Cookie": await createAdminCookie() } },
-    );
-  } catch (error) {
-    return errorResponse(error);
-  }
+export async function POST() {
+  return json(
+    { message: "교사 로그인은 Google Drive 연결 버튼을 이용해 주세요." },
+    { status: 405, headers: { Allow: "GET, DELETE" } },
+  );
 }
 
 export async function DELETE(request: Request) {
   try {
     assertSameOrigin(request);
-    return json({ ok: true }, { headers: { "Set-Cookie": clearAdminCookie() } });
+    return json({ ok: true }, { headers: { "Set-Cookie": clearTeacherCookie() } });
   } catch (error) {
     return errorResponse(error);
   }

@@ -1,63 +1,52 @@
-import { getAdminSession } from "../../../../lib/auth";
+import { getTeacherSession } from "../../../../lib/auth";
+import { getTeacherAccessToken, listObservationRows } from "../../../../lib/google-drive";
 import { errorResponse, HttpError, json } from "../../../../lib/http";
 import { decodeCursor, encodeCursor } from "../../../../lib/observations";
-import { getClassId, getEnv } from "../../../../lib/runtime";
-
-interface AdminObservationRow {
-  id: string;
-  student_number: number;
-  student_name: string;
-  observed_at: string;
-  memo: string;
-  image_bytes: number;
-  status: string;
-  created_at: string;
-}
+import { getTeacherById, seedImageTickets } from "../../../../lib/tenant";
 
 export async function GET(request: Request) {
   try {
-    if (!(await getAdminSession(request))) throw new HttpError(401, "교사 로그인이 필요합니다.");
-    const runtime = getEnv();
-    const classId = getClassId(runtime);
+    const session = await getTeacherSession(request);
+    if (!session?.teacherId) throw new HttpError(401, "교사 로그인이 필요합니다.");
+    const teacher = await getTeacherById(session.teacherId);
+    if (!teacher) throw new HttpError(401, "Google Drive를 다시 연결해 주세요.");
     const url = new URL(request.url);
     const cursorValue = url.searchParams.get("cursor");
     const cursor = decodeCursor(cursorValue);
     if (cursorValue && !cursor) throw new HttpError(400, "이어보기 정보가 올바르지 않습니다.");
-    const limit = 30;
-
-    const statement = cursor
-      ? runtime.DB.prepare(
-          `SELECT id, student_number, student_name, observed_at, memo, image_bytes, status, created_at
-             FROM observations
-            WHERE class_id = ? AND (created_at < ? OR (created_at = ? AND id < ?))
-            ORDER BY created_at DESC, id DESC LIMIT ?`,
-        ).bind(classId, cursor.createdAt, cursor.createdAt, cursor.id, limit + 1)
-      : runtime.DB.prepare(
-          `SELECT id, student_number, student_name, observed_at, memo, image_bytes, status, created_at
-             FROM observations
-            WHERE class_id = ?
-            ORDER BY created_at DESC, id DESC LIMIT ?`,
-        ).bind(classId, limit + 1);
-
-    const result = await statement.all<AdminObservationRow>();
-    const rows = result.results || [];
-    const hasMore = rows.length > limit;
-    const visibleRows = rows.slice(0, limit);
-    const last = visibleRows.at(-1);
-    return json({
-      items: visibleRows.map((row) => ({
-        id: row.id,
-        studentNumber: row.student_number,
-        studentName: row.student_name,
-        observedAt: row.observed_at,
-        memo: row.memo,
-        imageBytes: row.image_bytes,
-        status: row.status,
-        createdAt: row.created_at,
-        imageUrl: `/api/images/${row.id}`,
+    const accessToken = await getTeacherAccessToken(teacher);
+    const page = await listObservationRows(accessToken, teacher, {
+      limit: 30,
+      cursor,
+      includeHidden: true,
+    });
+    await seedImageTickets(
+      teacher.id,
+      page.items.map((item) => ({
+        observationId: item.id,
+        fileId: item.imageFileId,
+        imageType: item.imageType,
+        status: item.status,
       })),
-      hasMore,
-      nextCursor: hasMore && last ? encodeCursor(last.created_at, last.id) : null,
+    );
+    return json({
+      items: page.items.map((item) => ({
+        id: item.id,
+        studentNumber: item.studentNumber,
+        studentName: item.studentName,
+        observedAt: item.observedAt,
+        memo: item.memo,
+        imageBytes: item.imageBytes,
+        status: item.status,
+        createdAt: item.createdAt,
+        imageUrl: `/api/images/${item.id}`,
+        driveUrl: item.imageWebViewUrl,
+      })),
+      total: page.total,
+      hasMore: page.hasMore,
+      nextCursor: page.nextCursor
+        ? encodeCursor(page.nextCursor.createdAt, page.nextCursor.id)
+        : null,
     });
   } catch (error) {
     return errorResponse(error);
