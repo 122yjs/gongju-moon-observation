@@ -34,6 +34,13 @@ test("uses Blob multipart upload and lazy gallery loading", async () => {
   assert.doesNotMatch(source, /renderCalendar\(\);\s*refreshGallery\(\);/);
 });
 
+test("keeps student QR sessions available for the full observation period", async () => {
+  const auth = await readFile(new URL("../lib/auth.ts", import.meta.url), "utf8");
+  const admin = await readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8");
+  assert.match(auth, /STUDENT_SESSION_MAX_AGE = 60 \* 24 \* 60 \* 60/);
+  assert.match(admin, /60일 동안 제출과 갤러리를 이용/);
+});
+
 test("ships D1 and R2 bindings with a migration", async () => {
   const hosting = JSON.parse(await readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"));
   const migration = await readFile(new URL("../drizzle/0000_glossy_nomad.sql", import.meta.url), "utf8");
