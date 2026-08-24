@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://classroom-webapp-2026.znr1.chatgpt.site"),
   title: "공주 달 관찰 탐험대",
   description: "공주시 초등학생을 위한 달 모양·관찰 시간 확인과 사진 기록 활동",
   robots: { index: false, follow: false, noarchive: true },
