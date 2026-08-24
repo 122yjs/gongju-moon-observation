@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>공주 달 관찰 탐험대</title>
+  <meta name="description" content="공주시 초등학생을 위한 달 모양·관찰 시간 확인과 사진 기록 활동">
+  <meta property="og:title" content="공주 달 관찰 탐험대">
+  <meta property="og:description" content="달 모양을 살펴보고 관찰 사진을 기록해요">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="공주 달 관찰 탐험대">
+  <meta name="twitter:description" content="달 모양을 살펴보고 관찰 사진을 기록해요">
+  <meta name="twitter:image" content="/og.png">
+  <link rel="stylesheet" href="/app.css">
+  <style>
+    html { color-scheme: dark; }
+    body {
+      background:
+        radial-gradient(circle at 15% 8%, rgba(59, 130, 246, .12), transparent 28rem),
+        radial-gradient(circle at 85% 18%, rgba(245, 158, 11, .09), transparent 24rem),
+        #070913;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      opacity: .45;
+      background-image:
+        radial-gradient(circle at 8% 20%, white 0 1px, transparent 1.5px),
+        radial-gradient(circle at 78% 30%, white 0 1px, transparent 1.5px),
+        radial-gradient(circle at 35% 75%, white 0 1px, transparent 1.5px),
+        radial-gradient(circle at 92% 80%, white 0 1px, transparent 1.5px);
+      background-size: 180px 190px, 230px 210px, 260px 240px, 310px 270px;
+    }
+    ::-webkit-scrollbar { width: 7px; height: 7px; }
+    ::-webkit-scrollbar-track { background: #070913; }
+    ::-webkit-scrollbar-thumb { background: #283356; border-radius: 999px; }
+    .nav-active { background: #f59e0b; color: #111827; border-color: #fbbf24; }
+    .view-panel { animation: enter .22s ease-out; }
+    @keyframes enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    @keyframes pulse-moon {
+      0%, 100% { filter: drop-shadow(0 0 12px rgba(251, 191, 36, .42)); }
+      50% { filter: drop-shadow(0 0 23px rgba(251, 191, 36, .72)); }
+    }
+    .moon-glow { animation: pulse-moon 4s ease-in-out infinite; }
+    .calendar-cell { min-height: 5.3rem; }
+    .calendar-cell:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {
+      outline: 3px solid rgba(251, 191, 36, .85);
+      outline-offset: 2px;
+    }
+    .spinner {
+      width: 1.15rem; height: 1.15rem; border: 2px solid rgba(255,255,255,.25);
+      border-top-color: currentColor; border-radius: 999px; animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (max-width: 480px) { .calendar-cell { min-height: 4.2rem; } }
+    @media (prefers-reduced-motion: reduce) {
+      .view-panel, .moon-glow, .spinner { animation: none !important; }
+      * { scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body class="min-h-screen text-slate-100 font-sans antialiased selection:bg-amber-400 selection:text-slate-950">
+  <header class="sticky top-0 z-40 border-b border-space-700/80 bg-space-950/90 backdrop-blur-xl">
+    <div class="mx-auto max-w-6xl px-3 sm:px-5 py-3">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex min-w-0 items-center gap-3">
+          <div class="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-amber-400/30 bg-amber-400/10 text-2xl shadow-moon" aria-hidden="true">🌙</div>
+          <div class="min-w-0">
+            <h1 class="truncate text-lg sm:text-xl font-black tracking-tight">공주 달 관찰 탐험대</h1>
+            <p class="truncate text-[11px] sm:text-xs text-slate-400">📍 공주시 기준 · 초등 4학년 1반</p>
+          </div>
+        </div>
+        <span class="hidden sm:inline-flex rounded-full border border-blue-400/20 bg-blue-400/10 px-3 py-1 text-xs font-bold text-blue-200">과학 관찰 기록</span>
+      </div>
+      <nav class="mt-3 grid grid-cols-4 gap-1.5" aria-label="주요 메뉴">
+        <button type="button" data-view="today" onclick="showView('today')" class="nav-button nav-active min-h-11 rounded-xl border border-transparent px-2 py-2 text-xs sm:text-sm font-extrabold transition">오늘의 달</button>
+        <button type="button" data-view="month" onclick="showView('month')" class="nav-button min-h-11 rounded-xl border border-space-600 bg-space-800 px-2 py-2 text-xs sm:text-sm font-bold text-slate-300 transition hover:bg-space-700">월간 변화</button>
+        <button type="button" data-view="submit" onclick="showView('submit')" class="nav-button min-h-11 rounded-xl border border-space-600 bg-space-800 px-2 py-2 text-xs sm:text-sm font-bold text-slate-300 transition hover:bg-space-700">사진 제출</button>
+        <button type="button" data-view="gallery" onclick="showView('gallery')" class="nav-button min-h-11 rounded-xl border border-space-600 bg-space-800 px-2 py-2 text-xs sm:text-sm font-bold text-slate-300 transition hover:bg-space-700">전체보기</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="mx-auto w-full max-w-6xl px-3 sm:px-5 py-5 sm:py-8">
+    <div id="sessionBanner" class="mb-5 rounded-2xl border border-blue-400/20 bg-blue-400/[.07] px-4 py-3 text-sm leading-6 text-blue-100" role="status" aria-live="polite">
+      수업 참여 상태를 확인하고 있어요.
+    </div>
+    <section id="view-today" class="view-panel space-y-5" aria-labelledby="todayHeading">
+      <div class="rounded-3xl border border-space-700 bg-space-800/85 p-4 sm:p-5 shadow-card backdrop-blur">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <p class="text-xs font-bold text-amber-300">공주 하늘 달력</p>
+            <h2 id="todayHeading" class="mt-1 text-xl sm:text-2xl font-black">오늘의 달 모양과 관찰 시간</h2>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" onclick="changeSelectedDate(-1)" class="rounded-xl border border-space-600 bg-space-900 px-3 py-2 font-black hover:border-amber-400" aria-label="이전 날짜">‹</button>
+            <input id="targetDate" type="date" onchange="onDateSelected()" class="min-w-0 rounded-xl border border-space-600 bg-space-900 px-3 py-2 text-center text-sm font-bold text-white">
+            <button type="button" onclick="changeSelectedDate(1)" class="rounded-xl border border-space-600 bg-space-900 px-3 py-2 font-black hover:border-amber-400" aria-label="다음 날짜">›</button>
+            <button type="button" onclick="setToday()" class="rounded-xl bg-amber-500 px-3 py-2 text-xs font-black text-space-950 hover:bg-amber-400">오늘</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid gap-5 lg:grid-cols-[.9fr_1.1fr]">
+        <article class="rounded-3xl border border-amber-400/20 bg-gradient-to-br from-space-800 to-space-900 p-6 text-center shadow-card">
+          <p id="selectedDateLabel" class="text-sm font-bold text-slate-400">--</p>
+          <div class="mx-auto mt-5 h-52 w-52 max-w-full moon-glow">
+            <svg id="moonPhaseSVG" viewBox="0 0 100 100" class="h-full w-full" role="img" aria-label="달 모양"></svg>
+          </div>
+          <h3 id="moonPhaseName" class="mt-4 text-2xl font-black text-amber-300">--</h3>
+          <p id="moonPhaseDesc" class="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-300">--</p>
+          <div class="mt-5 flex justify-center gap-2 text-xs font-bold">
+            <span id="illuminationBadge" class="rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1.5 text-amber-200">밝기 --%</span>
+            <span id="moonAgeBadge" class="rounded-full border border-blue-400/25 bg-blue-400/10 px-3 py-1.5 text-blue-200">월령 --일</span>
+          </div>
+        </article>
+
+        <div class="space-y-4">
+          <div class="grid gap-3 sm:grid-cols-3">
+            <article class="rounded-2xl border border-space-700 bg-space-800/85 p-5 shadow-card">
+              <div class="text-2xl" aria-hidden="true">🌄</div>
+              <p class="mt-3 text-xs font-bold text-slate-400">월출시간</p>
+              <p id="moonriseTime" class="mt-1 text-2xl font-black">--:--</p>
+              <p class="mt-1 text-xs text-amber-300">동쪽 하늘에서 떠요</p>
+            </article>
+            <article class="rounded-2xl border border-amber-400/25 bg-amber-400/[.07] p-5 shadow-card">
+              <div class="text-2xl" aria-hidden="true">🌙</div>
+              <p class="mt-3 text-xs font-bold text-amber-200/80">월남중시간</p>
+              <p id="moonTransitTime" class="mt-1 text-2xl font-black text-amber-300">--:--</p>
+              <p id="moonTransitAlt" class="mt-1 text-xs text-amber-200">가장 높이 뜨는 때</p>
+            </article>
+            <article class="rounded-2xl border border-space-700 bg-space-800/85 p-5 shadow-card">
+              <div class="text-2xl" aria-hidden="true">🌆</div>
+              <p class="mt-3 text-xs font-bold text-slate-400">월몰시간</p>
+              <p id="moonsetTime" class="mt-1 text-2xl font-black">--:--</p>
+              <p class="mt-1 text-xs text-indigo-300">서쪽 하늘로 져요</p>
+            </article>
+          </div>
+
+          <article class="rounded-2xl border border-blue-400/20 bg-blue-400/[.07] p-5">
+            <h3 class="font-black text-blue-200">🔭 관찰 도움말</h3>
+            <p id="observationTip" class="mt-2 text-sm leading-6 text-slate-300">달 정보를 계산하고 있어요.</p>
+          </article>
+          <p class="px-1 text-[11px] leading-5 text-slate-500">※ 공주시 중심부(북위 36.4465°, 동경 127.1190°) 기준의 교육용 천문 계산값입니다. 지형과 대기 상태에 따라 실제 관찰 시각은 조금 달라질 수 있습니다.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-month" class="view-panel hidden space-y-5" aria-labelledby="monthHeading">
+      <div class="rounded-3xl border border-space-700 bg-space-800/85 p-4 sm:p-6 shadow-card">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <p class="text-xs font-bold text-amber-300">한 달 동안 어떻게 변할까요?</p>
+            <h2 id="monthHeading" class="mt-1 text-xl sm:text-2xl font-black">월간 달 모양의 변화</h2>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="changeMonth(-1)" class="rounded-xl border border-space-600 bg-space-900 px-3 py-2 font-black hover:border-amber-400" aria-label="이전 달">‹</button>
+            <strong id="calendarMonthTitle" class="min-w-24 text-center text-sm sm:text-base text-amber-300">--</strong>
+            <button type="button" onclick="changeMonth(1)" class="rounded-xl border border-space-600 bg-space-900 px-3 py-2 font-black hover:border-amber-400" aria-label="다음 달">›</button>
+          </div>
+        </div>
+        <div class="mt-5 grid grid-cols-7 gap-1 sm:gap-2 text-center text-[11px] font-bold text-slate-500" aria-hidden="true">
+          <span class="text-red-300">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span class="text-blue-300">토</span>
+        </div>
+        <div id="calendarGrid" class="mt-2 grid grid-cols-7 gap-1 sm:gap-2"></div>
+        <div class="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-400">
+          <span><i class="inline-block h-2.5 w-2.5 rounded-full bg-amber-400"></i> 초저녁 관찰 가능</span>
+          <span><i class="inline-block h-2.5 w-2.5 rounded-full border-2 border-blue-400"></i> 선택한 날짜</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-submit" class="view-panel hidden" aria-labelledby="submitHeading">
+      <div class="mx-auto max-w-2xl rounded-3xl border border-space-700 bg-space-800/90 p-5 sm:p-7 shadow-card">
+        <p class="text-xs font-bold text-amber-300">나의 관찰 기록 남기기</p>
+        <h2 id="submitHeading" class="mt-1 text-2xl font-black">달 사진 제출</h2>
+        <div class="mt-4 rounded-2xl border border-amber-400/20 bg-amber-400/[.07] p-4 text-sm text-amber-100">
+          <strong>4학년 1반</strong> 학생용 제출함입니다. 사진은 수업용 비공개 저장소에 안전하게 보관됩니다.
+        </div>
+
+        <form id="observationForm" class="mt-6 space-y-5" onsubmit="submitObservation(event)">
+          <div class="grid gap-4 sm:grid-cols-2">
+            <label class="block text-sm font-bold">번호
+              <input id="studentNumber" name="studentNumber" type="number" min="1" max="50" required placeholder="예: 5" class="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white placeholder:text-slate-600">
+            </label>
+            <label class="block text-sm font-bold">이름
+              <input id="studentName" name="studentName" type="text" maxlength="20" required autocomplete="off" placeholder="예: 김민준" class="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white placeholder:text-slate-600">
+            </label>
+          </div>
+          <label class="block text-sm font-bold">관찰 날짜와 시간
+            <input id="observedAt" name="observedAt" type="datetime-local" required class="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white">
+          </label>
+
+          <div>
+            <span class="block text-sm font-bold">달 사진</span>
+            <label class="mt-2 block cursor-pointer rounded-2xl border-2 border-dashed border-space-600 bg-space-900/70 p-5 text-center transition hover:border-amber-400">
+              <input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" required class="sr-only" onchange="previewPhoto(event)">
+              <div id="photoPlaceholder">
+                <div class="text-4xl" aria-hidden="true">📷</div>
+                <p class="mt-2 font-black">사진 촬영 또는 파일 선택</p>
+                <p class="mt-1 text-xs text-slate-500">JPG · PNG · WebP, 원본 12MB 이하</p>
+              </div>
+              <div id="photoPreviewWrap" class="hidden">
+                <img id="photoPreview" alt="선택한 달 사진 미리보기" class="mx-auto max-h-72 rounded-xl border border-amber-400/30 object-contain">
+                <p class="mt-2 text-xs font-bold text-amber-300">사진을 바꾸려면 다시 눌러 주세요.</p>
+              </div>
+            </label>
+          </div>
+
+          <label class="block text-sm font-bold">관찰 기록 <span class="font-normal text-slate-500">(선택)</span>
+            <textarea id="memo" name="memo" rows="4" maxlength="300" placeholder="달을 본 방향, 모양, 색깔, 주변 날씨 등을 적어 보세요." class="mt-2 w-full resize-y rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white placeholder:text-slate-600"></textarea>
+          </label>
+
+          <p class="rounded-xl border border-blue-400/20 bg-blue-400/[.06] px-4 py-3 text-xs leading-5 text-slate-300">얼굴, 집 주소, 차량 번호처럼 개인정보가 보이지 않도록 달과 하늘 중심으로 촬영해 주세요. 위치정보는 사진 압축 과정에서 제거됩니다.</p>
+
+          <div id="submitStatus" class="hidden rounded-xl px-4 py-3 text-sm font-bold" role="status" aria-live="polite"></div>
+          <button id="submitButton" type="submit" class="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 py-3.5 font-black text-space-950 shadow-lg shadow-amber-500/15 transition hover:bg-amber-400 disabled:cursor-wait disabled:opacity-60">
+            <span id="submitSpinner" class="spinner hidden"></span>
+            <span id="submitButtonText">사진 제출하기</span>
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <section id="view-gallery" class="view-panel hidden space-y-5" aria-labelledby="galleryHeading">
+      <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+        <div>
+          <p class="text-xs font-bold text-amber-300">우리 반이 함께 본 달</p>
+          <h2 id="galleryHeading" class="mt-1 text-2xl font-black">전체보기 <span id="galleryCount" class="text-base font-bold text-slate-500"></span></h2>
+        </div>
+        <button type="button" onclick="refreshGallery()" class="rounded-xl border border-space-600 bg-space-800 px-4 py-2.5 text-sm font-bold text-slate-300 hover:border-amber-400 hover:text-amber-300">↻ 새로고침</button>
+      </div>
+      <div id="galleryLoading" class="rounded-3xl border border-space-700 bg-space-800/70 py-16 text-center">
+        <span class="spinner mx-auto block text-amber-300"></span>
+        <p class="mt-3 text-sm text-slate-400">제출 사진을 불러오고 있어요.</p>
+      </div>
+      <div id="emptyGallery" class="hidden rounded-3xl border border-dashed border-space-600 bg-space-800/50 py-16 text-center">
+        <div class="text-5xl" aria-hidden="true">🌑</div>
+        <p class="mt-4 font-black">아직 제출된 사진이 없습니다.</p>
+        <p class="mt-1 text-sm text-slate-500">첫 번째 달 관찰 기록을 남겨 보세요!</p>
+      </div>
+      <div id="photoGallery" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
+      <div class="text-center">
+        <button id="loadMoreButton" type="button" onclick="loadGalleryPage(false)" class="hidden rounded-xl border border-amber-400/30 bg-amber-400/10 px-6 py-3 text-sm font-black text-amber-200 hover:bg-amber-400/20">사진 더 보기</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-space-800 px-4 py-6 text-center text-xs leading-5 text-slate-600">
+    공주 달 관찰 탐험대 · 사진 제출과 우리 반 갤러리는 수업 참여 링크로 입장한 학생만 이용할 수 있습니다.
+  </footer>
+
+  <div id="lightbox" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/90 p-4 backdrop-blur" onclick="closeLightbox(event)" role="dialog" aria-modal="true" aria-label="사진 크게 보기">
+    <button type="button" onclick="closeLightbox(event, true)" class="absolute right-4 top-4 grid h-11 w-11 place-items-center rounded-full bg-white/10 text-2xl font-bold hover:bg-white/20" aria-label="닫기">×</button>
+    <figure class="max-w-5xl text-center" onclick="event.stopPropagation()">
+      <img id="lightboxImage" alt="확대한 달 관찰 사진" class="max-h-[78vh] max-w-full rounded-2xl border border-amber-400/30 object-contain shadow-2xl">
+      <figcaption id="lightboxCaption" class="mt-4 text-sm font-bold text-white"></figcaption>
+    </figure>
+  </div>
+
+  <div id="toast" class="fixed bottom-5 left-1/2 z-50 hidden -translate-x-1/2 rounded-xl bg-slate-100 px-5 py-3 text-sm font-black text-slate-950 shadow-2xl" role="status" aria-live="polite"></div>
+
+  <script>
+    'use strict';
+
+    const GONGJU_LAT = 36.4465;
+    const GONGJU_LON = 127.1190;
+    const PAGE_SIZE = 12;
+    const MAX_SOURCE_BYTES = 12 * 1024 * 1024;
+    let selectedDate = new Date();
+    let calendarYear = selectedDate.getFullYear();
+    let calendarMonth = selectedDate.getMonth();
+    let compressedImageBlob = null;
+    let previewObjectUrl = '';
+    let pendingRequestId = '';
+    let galleryCursor = null;
+    let galleryLoaded = false;
+    let hasClassSession = false;
+    let galleryRequestController = null;
+    let toastTimer = null;
+
+    const MoonEngine = (() => {
+      const PI = Math.PI;
+      const sin = Math.sin;
+      const cos = Math.cos;
+      const tan = Math.tan;
+      const asin = Math.asin;
+      const atan = Math.atan2;
+      const acos = Math.acos;
+      const rad = PI / 180;
+      const dayMs = 86400000;
+      const J1970 = 2440588;
+      const J2000 = 2451545;
+      const e = rad * 23.4397;
+
+      const toJulian = (date) => date.valueOf() / dayMs - 0.5 + J1970;
+      const toDays = (date) => toJulian(date) - J2000;
+      const rightAscension = (l, b) => atan(sin(l) * cos(e) - tan(b) * sin(e), cos(l));
+      const declination = (l, b) => asin(sin(b) * cos(e) + cos(b) * sin(e) * sin(l));
+      const azimuth = (H, phi, dec) => atan(sin(H), cos(H) * sin(phi) - tan(dec) * cos(phi));
+      const altitude = (H, phi, dec) => asin(sin(phi) * sin(dec) + cos(phi) * cos(dec) * cos(H));
+      const siderealTime = (d, lw) => rad * (280.16 + 360.9856235 * d) - lw;
+      const astroRefraction = (h) => {
+        const safe = h < 0 ? 0 : h;
+        return 0.0002967 / Math.tan(safe + 0.00312536 / (safe + 0.08901179));
+      };
+
+      function moonCoords(d) {
+        const L = rad * (218.316 + 13.176396 * d);
+        const M = rad * (134.963 + 13.064993 * d);
+        const F = rad * (93.272 + 13.229350 * d);
+        const l = L + rad * 6.289 * sin(M);
+        const b = rad * 5.128 * sin(F);
+        const dist = 385001 - 20905 * cos(M);
+        return { ra: rightAscension(l, b), dec: declination(l, b), dist };
+      }
+
+      function sunCoords(d) {
+        const M = rad * (357.5291 + 0.98560028 * d);
+        const C = rad * (1.9148 * sin(M) + 0.02 * sin(2 * M) + 0.0003 * sin(3 * M));
+        const P = rad * 102.9372;
+        const L = M + C + P + PI;
+        return { dec: declination(L, 0), ra: rightAscension(L, 0) };
+      }
+
+      function getMoonPosition(date, lat, lng) {
+        const lw = rad * -lng;
+        const phi = rad * lat;
+        const d = toDays(date);
+        const c = moonCoords(d);
+        const H = siderealTime(d, lw) - c.ra;
+        let h = altitude(H, phi, c.dec);
+        h += astroRefraction(h);
+        return { azimuth: azimuth(H, phi, c.dec), altitude: h, distance: c.dist };
+      }
+
+      function getMoonIllumination(date) {
+        const d = toDays(date);
+        const s = sunCoords(d);
+        const m = moonCoords(d);
+        const sdist = 149598000;
+        const phi = acos(sin(s.dec) * sin(m.dec) + cos(s.dec) * cos(m.dec) * cos(s.ra - m.ra));
+        const inc = atan(sdist * sin(phi), m.dist - sdist * cos(phi));
+        const angle = atan(cos(s.dec) * sin(s.ra - m.ra), sin(s.dec) * cos(m.dec) - cos(s.dec) * sin(m.dec) * cos(s.ra - m.ra));
+        return {
+          fraction: (1 + cos(inc)) / 2,
+          phase: 0.5 + 0.5 * inc * (angle < 0 ? -1 : 1) / PI,
+          angle
+        };
+      }
+
+      function getMoonTimes(date, lat, lng) {
+        const t = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        const hc = 0.133 * rad;
+        let h0 = getMoonPosition(t, lat, lng).altitude - hc;
+        let rise;
+        let set;
+        let ye = 0;
+
+        for (let i = 1; i <= 24; i += 2) {
+          const h1 = getMoonPosition(new Date(t.getTime() + i * 3600000), lat, lng).altitude - hc;
+          const h2 = getMoonPosition(new Date(t.getTime() + (i + 1) * 3600000), lat, lng).altitude - hc;
+          const a = (h0 + h2) / 2 - h1;
+          const b = (h2 - h0) / 2;
+          const xe = -b / (2 * a);
+          ye = (a * xe + b) * xe + h1;
+          const d = b * b - 4 * a * h1;
+          let roots = 0;
+          let x1;
+          let x2;
+
+          if (d >= 0) {
+            const dx = Math.sqrt(d) / (Math.abs(a) * 2);
+            x1 = xe - dx;
+            x2 = xe + dx;
+            if (Math.abs(x1) <= 1) roots += 1;
+            if (Math.abs(x2) <= 1) roots += 1;
+            if (x1 < -1) x1 = x2;
+            if (roots === 1) {
+              if (h0 < 0) rise = i + x1;
+              else set = i + x1;
+            } else if (roots === 2) {
+              rise = i + (ye < 0 ? x2 : x1);
+              set = i + (ye < 0 ? x1 : x2);
+            }
+          }
+          if (rise !== undefined && set !== undefined) break;
+          h0 = h2;
+        }
+
+        const result = {};
+        if (rise !== undefined) result.rise = new Date(t.getTime() + rise * 3600000);
+        if (set !== undefined) result.set = new Date(t.getTime() + set * 3600000);
+        if (rise === undefined && set === undefined) result[ye > 0 ? 'alwaysUp' : 'alwaysDown'] = true;
+        return result;
+      }
+
+      return { getMoonPosition, getMoonIllumination, getMoonTimes };
+    })();
+
+    document.addEventListener('DOMContentLoaded', () => {
+      setDateInput(selectedDate);
+      setObservedAtNow();
+      renderToday();
+      renderCalendar();
+      checkSession();
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeLightbox(event, true);
+      });
+    });
+
+    async function checkSession() {
+      const banner = document.getElementById('sessionBanner');
+      try {
+        const response = await fetch('/api/session', { credentials: 'same-origin' });
+        const result = await response.json();
+        hasClassSession = Boolean(result.authenticated);
+      } catch (_) {
+        hasClassSession = false;
+      }
+
+      document.querySelectorAll('[data-view="submit"], [data-view="gallery"]').forEach((button) => {
+        button.disabled = !hasClassSession;
+        button.classList.toggle('opacity-45', !hasClassSession);
+        button.classList.toggle('cursor-not-allowed', !hasClassSession);
+      });
+      banner.className = hasClassSession
+        ? 'mb-5 rounded-2xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-3 text-sm font-bold text-emerald-100'
+        : 'mb-5 rounded-2xl border border-blue-400/20 bg-blue-400/[.07] px-4 py-3 text-sm leading-6 text-blue-100';
+      banner.textContent = hasClassSession
+        ? '✓ 수업 참여가 확인되었습니다. 사진 제출과 우리 반 갤러리를 이용할 수 있어요.'
+        : '달 정보는 자유롭게 볼 수 있어요. 사진 제출과 우리 반 갤러리는 선생님이 안내한 수업 QR로 입장해 주세요.';
+    }
+
+    function showView(name) {
+      if ((name === 'submit' || name === 'gallery') && !hasClassSession) {
+        showToast('선생님이 안내한 수업 QR로 먼저 입장해 주세요.');
+        return;
+      }
+      document.querySelectorAll('.view-panel').forEach((panel) => panel.classList.add('hidden'));
+      document.getElementById(`view-${name}`).classList.remove('hidden');
+      document.querySelectorAll('.nav-button').forEach((button) => {
+        const active = button.dataset.view === name;
+        button.classList.toggle('nav-active', active);
+        button.classList.toggle('bg-space-800', !active);
+        button.classList.toggle('text-slate-300', !active);
+        button.setAttribute('aria-selected', String(active));
+      });
+      if (name === 'month') renderCalendar();
+      if (name === 'gallery' && !galleryLoaded) refreshGallery();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function formatDateInput(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    function setDateInput(date) {
+      document.getElementById('targetDate').value = formatDateInput(date);
+    }
+
+    function setObservedAtNow() {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      document.getElementById('observedAt').value = `${formatDateInput(now)}T${hours}:${minutes}`;
+    }
+
+    function dateFromInput(value) {
+      const [year, month, day] = value.split('-').map(Number);
+      return new Date(year, month - 1, day, 12, 0, 0);
+    }
+
+    function changeSelectedDate(delta) {
+      selectedDate.setDate(selectedDate.getDate() + delta);
+      calendarYear = selectedDate.getFullYear();
+      calendarMonth = selectedDate.getMonth();
+      setDateInput(selectedDate);
+      renderToday();
+    }
+
+    function onDateSelected() {
+      const value = document.getElementById('targetDate').value;
+      if (!value) return;
+      selectedDate = dateFromInput(value);
+      calendarYear = selectedDate.getFullYear();
+      calendarMonth = selectedDate.getMonth();
+      renderToday();
+    }
+
+    function setToday() {
+      selectedDate = new Date();
+      calendarYear = selectedDate.getFullYear();
+      calendarMonth = selectedDate.getMonth();
+      setDateInput(selectedDate);
+      renderToday();
+    }
+
+    function formatTime(date) {
+      if (!date || Number.isNaN(date.getTime())) return '--:--';
+      return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    }
+
+    function getTransit(date) {
+      const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      let maxAltitude = -Infinity;
+      let maxTime = null;
+      for (let minute = 0; minute < 1440; minute += 2) {
+        const time = new Date(start.getTime() + minute * 60000);
+        const altitude = MoonEngine.getMoonPosition(time, GONGJU_LAT, GONGJU_LON).altitude;
+        if (altitude > maxAltitude) {
+          maxAltitude = altitude;
+          maxTime = time;
+        }
+      }
+      return { time: maxTime, altitude: maxAltitude * 180 / Math.PI };
+    }
+
+    function phaseInfo(phase) {
+      if (phase < 0.03 || phase > 0.97) return ['삭 (보이지 않는 달)', '달이 태양과 비슷한 방향에 있어 하늘에서 찾기 어려운 때예요.'];
+      if (phase < 0.22) return ['초승달', '해가 진 뒤 서쪽 하늘에서 오른쪽이 밝은 눈썹 모양 달을 볼 수 있어요.'];
+      if (phase < 0.28) return ['상현달', '오른쪽 절반이 밝은 반달이며 초저녁부터 관찰하기 좋아요.'];
+      if (phase < 0.47) return ['차오르는 달', '보름달을 향해 밝은 부분이 날마다 커지고 있어요.'];
+      if (phase < 0.53) return ['보름달 (망)', '태양의 반대쪽에 있어 둥글고 밝은 모습을 밤새 볼 수 있어요.'];
+      if (phase < 0.72) return ['기우는 달', '보름이 지난 뒤 오른쪽부터 어두워지며 밝은 부분이 줄어들어요.'];
+      if (phase < 0.78) return ['하현달', '왼쪽 절반이 밝은 반달이며 늦은 밤과 새벽에 잘 보여요.'];
+      return ['그믐달', '해 뜨기 전 동쪽 하늘에서 왼쪽이 밝은 가느다란 달을 볼 수 있어요.'];
+    }
+
+    function moonSvg(phase, radius = 46) {
+      const cx = 50;
+      const cy = 50;
+      const top = cy - radius;
+      const bottom = cy + radius;
+      const dark = `<circle cx="50" cy="50" r="${radius}" fill="#1b233d" stroke="#334269" stroke-width="2"/>`;
+      if (phase <= 0.015 || phase >= 0.985) return dark;
+      if (phase >= 0.485 && phase <= 0.515) {
+        return `<circle cx="50" cy="50" r="${radius}" fill="#fbbf24" stroke="#f59e0b" stroke-width="2"/>`;
+      }
+      const rx = Math.max(0.01, radius * Math.abs(Math.cos(2 * Math.PI * phase)));
+      let path;
+      if (phase < 0.5) {
+        const sweep = phase < 0.25 ? 0 : 1;
+        path = `M ${cx} ${top} A ${radius} ${radius} 0 0 1 ${cx} ${bottom} A ${rx} ${radius} 0 0 ${sweep} ${cx} ${top}`;
+      } else {
+        const sweep = phase < 0.75 ? 1 : 0;
+        path = `M ${cx} ${bottom} A ${radius} ${radius} 0 0 1 ${cx} ${top} A ${rx} ${radius} 0 0 ${sweep} ${cx} ${bottom}`;
+      }
+      return `${dark}<path d="${path}" fill="#fbbf24"/><circle cx="50" cy="50" r="${radius}" fill="none" stroke="#f59e0b" stroke-width="1.5"/>`;
+    }
+
+    function renderToday() {
+      const noon = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 12);
+      const illumination = MoonEngine.getMoonIllumination(noon);
+      const times = MoonEngine.getMoonTimes(noon, GONGJU_LAT, GONGJU_LON);
+      const transit = getTransit(noon);
+      const [name, description] = phaseInfo(illumination.phase);
+      const dateLabel = new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }).format(noon);
+
+      document.getElementById('selectedDateLabel').textContent = dateLabel;
+      document.getElementById('moonPhaseSVG').innerHTML = moonSvg(illumination.phase);
+      document.getElementById('moonPhaseName').textContent = name;
+      document.getElementById('moonPhaseDesc').textContent = description;
+      document.getElementById('illuminationBadge').textContent = `밝기 ${Math.round(illumination.fraction * 100)}%`;
+      document.getElementById('moonAgeBadge').textContent = `월령 ${(illumination.phase * 29.5306).toFixed(1)}일`;
+      document.getElementById('moonriseTime').textContent = formatTime(times.rise);
+      document.getElementById('moonsetTime').textContent = formatTime(times.set);
+      document.getElementById('moonTransitTime').textContent = formatTime(transit.time);
+      document.getElementById('moonTransitAlt').textContent = transit.altitude > 0
+        ? `남쪽 하늘 약 ${Math.round(transit.altitude)}° 높이`
+        : '이날은 지평선 아래에서 남중해요';
+      document.getElementById('observationTip').textContent = observationTip(illumination.phase, times);
+    }
+
+    function observationTip(phase, times) {
+      if (phase < 0.05 || phase > 0.95) return '삭 무렵에는 달이 태양 가까이에 있어 맨눈으로 관찰하기 어려워요. 며칠 뒤 초승달을 기다려 보세요.';
+      if (phase < 0.5) return `차오르는 달은 해가 진 뒤 관찰하기 좋아요. 월몰 예상 시각은 ${formatTime(times.set)}입니다.`;
+      return `기우는 달은 늦은 밤이나 새벽에 더 잘 보여요. 월출 예상 시각은 ${formatTime(times.rise)}입니다.`;
+    }
+
+    function isEveningVisible(date) {
+      const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 18);
+      for (let minutes = 0; minutes <= 300; minutes += 30) {
+        const time = new Date(start.getTime() + minutes * 60000);
+        if (MoonEngine.getMoonPosition(time, GONGJU_LAT, GONGJU_LON).altitude > 0) return true;
+      }
+      return false;
+    }
+
+    function changeMonth(delta) {
+      calendarMonth += delta;
+      if (calendarMonth < 0) { calendarMonth = 11; calendarYear -= 1; }
+      if (calendarMonth > 11) { calendarMonth = 0; calendarYear += 1; }
+      renderCalendar();
+    }
+
+    function renderCalendar() {
+      const grid = document.getElementById('calendarGrid');
+      grid.replaceChildren();
+      document.getElementById('calendarMonthTitle').textContent = `${calendarYear}년 ${calendarMonth + 1}월`;
+      const firstWeekday = new Date(calendarYear, calendarMonth, 1).getDay();
+      const days = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+      const today = new Date();
+
+      for (let blank = 0; blank < firstWeekday; blank += 1) {
+        const cell = document.createElement('div');
+        cell.className = 'calendar-cell rounded-xl bg-space-900/30';
+        cell.setAttribute('aria-hidden', 'true');
+        grid.appendChild(cell);
+      }
+
+      for (let day = 1; day <= days; day += 1) {
+        const date = new Date(calendarYear, calendarMonth, day, 12);
+        const phase = MoonEngine.getMoonIllumination(date).phase;
+        const evening = isEveningVisible(date);
+        const selected = selectedDate.getFullYear() === calendarYear && selectedDate.getMonth() === calendarMonth && selectedDate.getDate() === day;
+        const isTodayDate = today.getFullYear() === calendarYear && today.getMonth() === calendarMonth && today.getDate() === day;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `calendar-cell relative flex flex-col justify-between rounded-xl border p-1.5 transition ${selected ? 'border-blue-400 bg-blue-400/10' : evening ? 'border-amber-400/45 bg-amber-400/[.06] hover:border-amber-300' : 'border-space-700 bg-space-900/65 hover:border-space-500'}`;
+        button.setAttribute('aria-label', `${calendarMonth + 1}월 ${day}일 ${phaseInfo(phase)[0]}`);
+        button.addEventListener('click', () => selectCalendarDate(day));
+        const top = document.createElement('span');
+        top.className = `flex w-full items-center justify-between text-[11px] font-bold ${isTodayDate ? 'text-amber-300' : 'text-slate-400'}`;
+        top.innerHTML = `<span>${day}</span>${evening ? '<i class="h-2 w-2 rounded-full bg-amber-400"></i>' : ''}`;
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 100 100');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('class', 'mx-auto h-8 w-8 sm:h-10 sm:w-10');
+        svg.innerHTML = moonSvg(phase, 44);
+        button.append(top, svg);
+        grid.appendChild(button);
+      }
+    }
+
+    function selectCalendarDate(day) {
+      selectedDate = new Date(calendarYear, calendarMonth, day, 12);
+      setDateInput(selectedDate);
+      renderToday();
+      showView('today');
+    }
+
+    async function previewPhoto(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      compressedImageBlob = null;
+      pendingRequestId = '';
+      if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
+        showSubmitStatus('JPG, PNG 또는 WebP 사진을 선택해 주세요.', true);
+        event.target.value = '';
+        return;
+      }
+      if (file.size > MAX_SOURCE_BYTES) {
+        showSubmitStatus('원본 사진은 12MB 이하여야 합니다.', true);
+        event.target.value = '';
+        return;
+      }
+
+      showSubmitStatus('사진 크기를 알맞게 줄이고 있어요…', false);
+      try {
+        compressedImageBlob = await compressImage(file);
+        if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+        previewObjectUrl = URL.createObjectURL(compressedImageBlob);
+        document.getElementById('photoPreview').src = previewObjectUrl;
+        document.getElementById('photoPlaceholder').classList.add('hidden');
+        document.getElementById('photoPreviewWrap').classList.remove('hidden');
+        hideSubmitStatus();
+      } catch (error) {
+        event.target.value = '';
+        showSubmitStatus(error.message || '사진을 읽지 못했습니다.', true);
+      }
+    }
+
+    function compressImage(file) {
+      return new Promise((resolve, reject) => {
+        const image = new Image();
+        const objectUrl = URL.createObjectURL(file);
+        image.onload = () => {
+          try {
+            const maxSide = 1400;
+            const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+            const width = Math.max(1, Math.round(image.naturalWidth * scale));
+            const height = Math.max(1, Math.round(image.naturalHeight * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext('2d');
+            if (!context) throw new Error('사진을 처리할 수 없는 브라우저입니다.');
+            context.fillStyle = '#0b0e17';
+            context.fillRect(0, 0, width, height);
+            context.drawImage(image, 0, 0, width, height);
+            canvas.toBlob((blob) => {
+              URL.revokeObjectURL(objectUrl);
+              if (!blob) {
+                reject(new Error('사진을 압축하지 못했습니다.'));
+              } else if (blob.size > 3 * 1024 * 1024) {
+                reject(new Error('압축한 사진이 3MB를 넘습니다. 더 작은 사진을 선택해 주세요.'));
+              } else {
+                resolve(blob);
+              }
+            }, 'image/jpeg', 0.82);
+          } catch (error) {
+            URL.revokeObjectURL(objectUrl);
+            reject(error);
+          }
+        };
+        image.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          reject(new Error('이 사진 형식은 브라우저에서 읽을 수 없습니다.'));
+        };
+        image.src = objectUrl;
+      });
+    }
+
+    async function submitObservation(event) {
+      event.preventDefault();
+      if (!compressedImageBlob) {
+        showSubmitStatus('달 사진을 먼저 선택해 주세요.', true);
+        return;
+      }
+      setSubmitBusy(true);
+      showSubmitStatus('수업 제출함에 사진을 저장하고 있어요…', false);
+
+      const formData = new FormData();
+      if (!pendingRequestId) pendingRequestId = crypto.randomUUID();
+      formData.append('requestId', pendingRequestId);
+      formData.append('studentNumber', document.getElementById('studentNumber').value);
+      formData.append('studentName', document.getElementById('studentName').value.trim());
+      formData.append('observedAt', document.getElementById('observedAt').value);
+      formData.append('memo', document.getElementById('memo').value.trim());
+      formData.append('photo', compressedImageBlob, 'moon.jpg');
+
+      try {
+        const response = await fetch('/api/observations', {
+          method: 'POST',
+          credentials: 'same-origin',
+          body: formData
+        });
+        const result = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+          hasClassSession = false;
+          await checkSession();
+        }
+        if (!response.ok) throw new Error(result.message || '사진을 제출하지 못했습니다.');
+        showSubmitStatus(result.message || '사진을 제출했습니다.', false, true);
+        document.getElementById('observationForm').reset();
+        compressedImageBlob = null;
+        pendingRequestId = '';
+        if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+        previewObjectUrl = '';
+        document.getElementById('photoPreview').removeAttribute('src');
+        document.getElementById('photoPreviewWrap').classList.add('hidden');
+        document.getElementById('photoPlaceholder').classList.remove('hidden');
+        setObservedAtNow();
+        if (galleryLoaded) refreshGallery();
+        showToast('달 관찰 사진을 제출했어요! 🌙');
+      } catch (error) {
+        showSubmitStatus(error && error.message ? error.message : '제출하지 못했습니다. 잠시 후 다시 시도해 주세요.', true);
+      } finally {
+        setSubmitBusy(false);
+      }
+    }
+
+    function setSubmitBusy(busy) {
+      document.getElementById('submitButton').disabled = busy;
+      document.getElementById('submitSpinner').classList.toggle('hidden', !busy);
+      document.getElementById('submitButtonText').textContent = busy ? '제출 중…' : '사진 제출하기';
+    }
+
+    function showSubmitStatus(message, isError, isSuccess = false) {
+      const status = document.getElementById('submitStatus');
+      status.textContent = message;
+      status.className = `rounded-xl border px-4 py-3 text-sm font-bold ${isError ? 'border-red-400/30 bg-red-400/10 text-red-200' : isSuccess ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200' : 'border-blue-400/30 bg-blue-400/10 text-blue-200'}`;
+    }
+
+    function hideSubmitStatus() {
+      document.getElementById('submitStatus').classList.add('hidden');
+    }
+
+    function refreshGallery() {
+      galleryCursor = null;
+      galleryLoaded = false;
+      document.getElementById('photoGallery').replaceChildren();
+      loadGalleryPage(true);
+    }
+
+    async function loadGalleryPage(replace) {
+      const loading = document.getElementById('galleryLoading');
+      const moreButton = document.getElementById('loadMoreButton');
+      if (galleryRequestController) galleryRequestController.abort();
+      const requestController = new AbortController();
+      galleryRequestController = requestController;
+      loading.classList.remove('hidden');
+      moreButton.classList.add('hidden');
+      moreButton.disabled = true;
+
+      try {
+        const query = new URLSearchParams({ limit: String(PAGE_SIZE) });
+        if (galleryCursor) query.set('cursor', galleryCursor);
+        const response = await fetch(`/api/observations?${query}`, {
+          credentials: 'same-origin',
+          signal: requestController.signal
+        });
+        const page = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+          hasClassSession = false;
+          await checkSession();
+        }
+        if (!response.ok) throw new Error(page.message || '사진을 불러오지 못했습니다.');
+        galleryLoaded = true;
+        if (replace) document.getElementById('photoGallery').replaceChildren();
+        renderGalleryItems(page.items || []);
+        galleryCursor = page.nextCursor || null;
+        document.getElementById('galleryCount').textContent = `(${Number(page.total) || 0}개)`;
+        document.getElementById('emptyGallery').classList.toggle('hidden', Number(page.total) !== 0);
+        moreButton.classList.toggle('hidden', !page.hasMore);
+      } catch (error) {
+        if (error && error.name === 'AbortError') return;
+        document.getElementById('emptyGallery').classList.remove('hidden');
+        document.getElementById('emptyGallery').querySelector('p').textContent = error && error.message ? error.message : '사진을 불러오지 못했습니다.';
+      } finally {
+        if (galleryRequestController === requestController) {
+          galleryRequestController = null;
+          loading.classList.add('hidden');
+          moreButton.disabled = false;
+        }
+      }
+    }
+
+    function renderGalleryItems(items) {
+      const gallery = document.getElementById('photoGallery');
+      items.forEach((item) => {
+        const card = document.createElement('article');
+        card.className = 'overflow-hidden rounded-2xl border border-space-700 bg-space-800/90 shadow-card transition hover:border-amber-400/35';
+        const imageArea = document.createElement('button');
+        imageArea.type = 'button';
+        imageArea.className = 'block h-56 w-full overflow-hidden bg-space-900 text-slate-500';
+        if (item.imageUrl && /^\/api\/images\/[0-9a-f-]+$/.test(item.imageUrl)) {
+          const image = document.createElement('img');
+          image.src = item.imageUrl;
+          image.alt = `${item.studentNumber}번 ${item.displayName} 학생의 달 관찰 사진`;
+          image.loading = 'lazy';
+          image.className = 'h-full w-full object-cover transition duration-300 hover:scale-105';
+          imageArea.appendChild(image);
+          imageArea.addEventListener('click', () => openLightbox(item.imageUrl, `${item.studentNumber}번 ${item.displayName} · ${formatObservedAt(item.observedAt)}`));
+        } else {
+          imageArea.innerHTML = '<span class="grid h-full place-items-center text-sm">사진 파일을 찾을 수 없습니다.</span>';
+          imageArea.disabled = true;
+        }
+
+        const content = document.createElement('div');
+        content.className = 'p-4';
+        const heading = document.createElement('div');
+        heading.className = 'flex items-center justify-between gap-3';
+        const title = document.createElement('h3');
+        title.className = 'font-black text-white';
+        title.textContent = `${item.studentNumber}번 ${item.displayName}`;
+        const badge = document.createElement('span');
+        badge.className = 'shrink-0 rounded-full bg-amber-400/10 px-2.5 py-1 text-[11px] font-bold text-amber-300';
+        badge.textContent = '4학년 1반';
+        heading.append(title, badge);
+        const time = document.createElement('p');
+        time.className = 'mt-2 text-xs text-slate-500';
+        time.textContent = `관찰 ${formatObservedAt(item.observedAt)}`;
+        content.append(heading, time);
+        if (item.memo) {
+          const memo = document.createElement('p');
+          memo.className = 'mt-3 rounded-xl border border-space-700 bg-space-900/60 p-3 text-sm leading-6 text-slate-300';
+          memo.textContent = item.memo;
+          content.appendChild(memo);
+        }
+        card.append(imageArea, content);
+        gallery.appendChild(card);
+      });
+    }
+
+    function formatObservedAt(value) {
+      if (!value) return '시간 미입력';
+      return String(value).replace('T', ' ').slice(0, 16);
+    }
+
+    function openLightbox(src, caption) {
+      document.getElementById('lightboxImage').src = src;
+      document.getElementById('lightboxCaption').textContent = caption;
+      const lightbox = document.getElementById('lightbox');
+      lightbox.classList.remove('hidden');
+      lightbox.classList.add('flex');
+      document.body.classList.add('overflow-hidden');
+    }
+
+    function closeLightbox(event, force = false) {
+      if (!force && event && event.target !== document.getElementById('lightbox')) return;
+      const lightbox = document.getElementById('lightbox');
+      lightbox.classList.add('hidden');
+      lightbox.classList.remove('flex');
+      document.getElementById('lightboxImage').removeAttribute('src');
+      document.body.classList.remove('overflow-hidden');
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.remove('hidden');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.add('hidden'), 3200);
+    }
+  </script>
+</body>
+</html>

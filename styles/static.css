@@ -1,0 +1,14 @@
+@import "tailwindcss";
+@source "../public/index.html";
+
+@theme {
+  --font-sans: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --color-space-950: #070913;
+  --color-space-900: #0b0e17;
+  --color-space-850: #101524;
+  --color-space-800: #121829;
+  --color-space-700: #1b233d;
+  --color-space-600: #283356;
+  --shadow-moon: 0 0 34px rgba(251, 191, 36, 0.28);
+  --shadow-card: 0 18px 50px rgba(0, 0, 0, 0.24);
+}
