@@ -2,6 +2,7 @@ import { getClassId, getEnv } from "./runtime";
 
 const STUDENT_COOKIE = "moon_class_session";
 const ADMIN_COOKIE = "moon_admin_session";
+const STUDENT_SESSION_MAX_AGE = 60 * 24 * 60 * 60;
 const encoder = new TextEncoder();
 
 export interface SessionPayload {
@@ -95,7 +96,7 @@ function cookie(name: string, value: string, maxAge: number) {
 }
 
 export async function createStudentCookie() {
-  const maxAge = 7 * 24 * 60 * 60;
+  const maxAge = STUDENT_SESSION_MAX_AGE;
   const value = await signSession({
     role: "student",
     classId: getClassId(),
