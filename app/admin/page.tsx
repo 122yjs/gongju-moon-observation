@@ -188,7 +188,7 @@ export default function AdminPage() {
             <div className="min-w-0 self-center">
               <p className="text-xs font-bold text-blue-300">학생 수업 참여 QR</p>
               <h2 className="mt-1 text-xl font-black">학생에게 이 QR만 안내하세요</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-400">QR을 촬영하면 계정 로그인 없이 이 기기에서 7일 동안 제출과 갤러리를 이용할 수 있습니다.</p>
+              <p className="mt-2 text-sm leading-6 text-slate-400">QR을 촬영하면 계정 로그인 없이 이 기기에서 60일 동안 제출과 갤러리를 이용할 수 있습니다.</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <button onClick={() => navigator.clipboard.writeText(joinUrl)} className="rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-black text-white">참여 링크 복사</button>
                 <a href={joinUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-space-600 px-4 py-2.5 text-sm font-bold">링크 확인</a>
