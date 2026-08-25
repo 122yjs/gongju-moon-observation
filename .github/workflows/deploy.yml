@@ -32,8 +32,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build static student CSS
+        run: npm run build:static
+
+      # CI에서는 Sites timeout 래퍼 대신 vinext를 직접 호출합니다.
       - name: Build Worker
-        run: npm run build
+        run: npx vinext build
 
       - name: Deploy to Cloudflare
         env:
