@@ -77,6 +77,7 @@ OAuth 클라이언트 보안 비밀번호는 `SESSION_SECRET`에서 파생한 �
 - `npm run build:static`: 학생 화면용 Tailwind CSS 생성
 - `npm run lint`: 정적 검사
 - `npm run build`: vinext/Cloudflare Worker 빌드
+- `npm run deploy`: 로컬에서 Cloudflare Worker로 배포
 - `npm test`: 빌드 후 Drive OAuth·중앙 비저장 회귀 검사
 - `npm run db:generate`: Drizzle migration 생성
 
@@ -84,11 +85,21 @@ OAuth 클라이언트 보안 비밀번호는 `SESSION_SECRET`에서 파생한 �
 
 - 운영 주소: https://gongju-moon-observation.1226ijs.workers.dev
 - 플랫폼: Cloudflare Workers (vinext)
+- 자동 배포: `main` 푸시 시 GitHub Actions (`.github/workflows/deploy.yml`)
 
 필수 바인딩·설정:
 
-- D1 `DB`
+- D1 `DB` (`wrangler.jsonc`에 연결됨)
 - `SESSION_SECRET`: 세션 서명과 OAuth 토큰 암호화용 32바이트 이상 무작위 값
 - `ADMIN_PASSWORD_HASH`: `/operator` 로그인 비밀번호 SHA-256 해시
 
 이전 중앙 자료 정리 기능 때문에 기존 R2 `BUCKET` 바인딩은 전환 기간에만 유지합니다. 새 제출 코드는 R2에 쓰지 않습니다.
+
+### GitHub Actions 한 번만 설정
+
+1. Cloudflare 대시보드 → **My Profile** → **API Tokens** → **Create Token**
+2. 템플릿 **Edit Cloudflare Workers** 선택 후 토큰 발급
+3. GitHub 저장소 → **Settings** → **Secrets and variables** → **Actions**
+4. `CLOUDFLARE_API_TOKEN` 시크릿에 토큰 값 저장
+
+이후 `main`에 푸시하면 빌드 후 Worker가 자동으로 갱신됩니다. 앱 시크릿(`SESSION_SECRET` 등)은 Cloudflare Worker에 이미 있으면 유지됩니다.

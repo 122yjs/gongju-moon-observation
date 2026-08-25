@@ -11,6 +11,7 @@
     "build": "npm run build:static && bash scripts/build-verified.sh",
     "build:static": "node scripts/build-static-css.mjs",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
+    "deploy": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext deploy --name gongju-moon-observation",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
