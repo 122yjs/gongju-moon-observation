@@ -16,6 +16,9 @@ function createClassList() {
       if (force === undefined ? !values.has(name) : force) values.add(name);
       else values.delete(name);
     },
+    contains(name) {
+      return values.has(name);
+    },
   };
 }
 
@@ -68,16 +71,19 @@ test("keeps student PII out of long-lived central D1 tables", async () => {
   assert.doesNotMatch(migration, /student_name|student_number|observed_at|\bmemo\b|image_bytes/);
 });
 
-test("uses the Android system photo chooser for camera and gallery", async () => {
+test("captures with the camera in-page and keeps gallery selection separate", async () => {
   const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
   assert.match(html, /<input[^>]*id="photoInput"[^>]*type="file"[^>]*>/);
   assert.match(html, /<input[^>]*id="photoInput"[^>]*accept="image\/\*"[^>]*>/);
   assert.match(html, /<input[^>]*id="photoInput"[^>]*onchange="previewPhoto\(event\)"[^>]*>/);
   assert.doesNotMatch(html, /<input[^>]*id="photoInput"[^>]*capture=/);
-  assert.doesNotMatch(html, /id="photoInput(?:Camera|Gallery)"/);
+  assert.match(html, /<button[^>]*type="button"[^>]*onclick="startCamera\(\)"[^>]*>/);
+  assert.match(html, /<video[^>]*id="cameraPreview"[^>]*autoplay[^>]*playsinline[^>]*>/);
+  assert.match(html, /<button[^>]*type="button"[^>]*onclick="captureCameraPhoto\(\)"[^>]*>/);
+  assert.match(html, /navigator\.mediaDevices\.getUserMedia/);
 });
 
-test("keeps a MIME-less Android camera JPEG attached through submission", async () => {
+test("keeps an Android gallery JPEG with a nonstandard MIME attached through submission", async () => {
   const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
   const script = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
   assert.ok(script, "student page script should exist");
@@ -90,7 +96,7 @@ test("keeps a MIME-less Android camera JPEG attached through submission", async 
   getElement("studentNumber").value = "7";
   getElement("studentName").value = "홍길동";
   getElement("observedAt").value = "2026-08-26T20:30";
-  getElement("memo").value = "안드로이드 카메라 촬영";
+  getElement("memo").value = "안드로이드 갤러리 선택";
   getElement("observationForm").reset = () => {};
   const requests = [];
   const context = {
@@ -130,19 +136,79 @@ globalThis.__photoFlow = { previewPhoto, submitObservation };`,
     context,
   );
 
-  const cameraInput = createElement({
-    files: [new File([Uint8Array.from([0xff, 0xd8, 0xff, 0xd9])], "camera.jpg", { type: "" })],
-    value: "camera.jpg",
+  const galleryInput = createElement({
+    files: [new File([Uint8Array.from([0xff, 0xd8, 0xff, 0xd9])], "gallery.jpg", { type: "application/octet-stream" })],
+    value: "gallery.jpg",
   });
-  await context.__photoFlow.previewPhoto({ target: cameraInput });
+  await context.__photoFlow.previewPhoto({ target: galleryInput });
   await context.__photoFlow.submitObservation({ preventDefault() {} });
 
-  assert.equal(requests.length, 1, "camera photo should reach the observation API");
+  assert.equal(requests.length, 1, "gallery photo should reach the observation API");
   assert.equal(requests[0].url, "/api/observations");
   assert.equal(requests[0].options.credentials, "same-origin");
   const photo = requests[0].options.body.get("photo");
   assert.ok(photo instanceof File, "multipart photo should be a File");
   assert.ok(photo.size > 0, "multipart photo should retain image bytes");
+});
+
+test("attaches a frame from the in-page camera without leaving the page", async () => {
+  const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
+  const script = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
+  assert.ok(script, "student page script should exist");
+
+  const elements = new Map();
+  const getElement = (id) => {
+    if (!elements.has(id)) elements.set(id, createElement());
+    return elements.get(id);
+  };
+  getElement("cameraPreview").videoWidth = 1600;
+  getElement("cameraPreview").videoHeight = 900;
+  getElement("cameraPanel").classList.add("hidden");
+  getElement("photoPreviewWrap").classList.add("hidden");
+  const track = { stopped: false, stop() { this.stopped = true; } };
+  const stream = { getTracks: () => [track] };
+  const context = {
+    Blob,
+    URL: {
+      createObjectURL: () => "blob:camera-frame",
+      revokeObjectURL() {},
+    },
+    document: {
+      addEventListener() {},
+      createElement(tagName) {
+        assert.equal(tagName, "canvas");
+        return {
+          width: 0,
+          height: 0,
+          getContext: () => ({ drawImage() {} }),
+          toBlob(callback) {
+            callback(new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], { type: "image/jpeg" }));
+          },
+        };
+      },
+      getElementById: getElement,
+    },
+    navigator: {
+      mediaDevices: {
+        getUserMedia: async () => stream,
+      },
+    },
+  };
+
+  runInNewContext(
+    `${script}\nglobalThis.__cameraFlow = { startCamera, captureCameraPhoto };`,
+    context,
+  );
+
+  await context.__cameraFlow.startCamera();
+  assert.equal(getElement("cameraPreview").srcObject, stream);
+  assert.equal(getElement("cameraPanel").classList.contains("hidden"), false);
+
+  context.__cameraFlow.captureCameraPhoto();
+  assert.equal(track.stopped, true);
+  assert.equal(getElement("cameraPanel").classList.contains("hidden"), true);
+  assert.equal(getElement("photoPreview").src, "blob:camera-frame");
+  assert.equal(getElement("photoPreviewWrap").classList.contains("hidden"), false);
 });
 
 test("protects OAuth and class sessions and keeps the student session for 60 days", async () => {
