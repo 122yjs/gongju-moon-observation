@@ -84,7 +84,7 @@ export async function POST(request: Request) {
       throw new HttpError(401, "수업 참여 링크로 입장한 뒤 제출해 주세요.");
     }
     const contentLength = Number(request.headers.get("Content-Length") || 0);
-    if (contentLength > 4 * 1024 * 1024) {
+    if (contentLength > 8 * 1024 * 1024) {
       throw new HttpError(413, "제출 사진의 용량이 너무 큽니다.");
     }
     const teacher = await getTeacherById(session.teacherId);

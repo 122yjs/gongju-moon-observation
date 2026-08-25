@@ -47,8 +47,8 @@ export function validateObservationForm(form: FormData): ObservationInput {
   const memo = normalizeText(form.get("memo") ?? "", 300, "관찰 기록");
   const photo = form.get("photo");
   if (!(photo instanceof File)) throw new HttpError(400, "달 사진을 선택해 주세요.");
-  if (photo.size <= 0 || photo.size > 3 * 1024 * 1024) {
-    throw new HttpError(413, "압축된 사진은 3MB 이하여야 합니다.");
+  if (photo.size <= 0 || photo.size > 6 * 1024 * 1024) {
+    throw new HttpError(413, "압축된 사진은 6MB 이하여야 합니다.");
   }
 
   return { requestId, studentNumber, studentName, observedAt, memo, photo };

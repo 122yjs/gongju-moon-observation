@@ -71,16 +71,37 @@ test("keeps student PII out of long-lived central D1 tables", async () => {
   assert.doesNotMatch(migration, /student_name|student_number|observed_at|\bmemo\b|image_bytes/);
 });
 
-test("captures with the camera in-page and keeps gallery selection separate", async () => {
+test("offers external high-quality capture, in-page camera fallback, and gallery separately", async () => {
   const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
+  assert.match(html, /<input[^>]*id="captureInput"[^>]*type="file"[^>]*>/);
+  assert.match(html, /<input[^>]*id="captureInput"[^>]*accept="image\/\*"[^>]*>/);
+  assert.match(html, /<input[^>]*id="captureInput"[^>]*capture="environment"[^>]*>/);
+  assert.match(html, /<input[^>]*id="captureInput"[^>]*onchange="previewPhoto\(event, 'capture'\)"[^>]*>/);
+  assert.match(html, /고화질 촬영/);
   assert.match(html, /<input[^>]*id="photoInput"[^>]*type="file"[^>]*>/);
   assert.match(html, /<input[^>]*id="photoInput"[^>]*accept="image\/\*"[^>]*>/);
-  assert.match(html, /<input[^>]*id="photoInput"[^>]*onchange="previewPhoto\(event\)"[^>]*>/);
+  assert.match(html, /<input[^>]*id="photoInput"[^>]*onchange="previewPhoto\(event, 'gallery'\)"[^>]*>/);
   assert.doesNotMatch(html, /<input[^>]*id="photoInput"[^>]*capture=/);
+  assert.match(html, /<details[^>]*id="cameraFallback"[^>]*>/);
+  assert.match(html, /촬영이 안 될 때/);
+  assert.match(html, /페이지 안 카메라 열기/);
+  assert.doesNotMatch(html, /<button[^>]*onclick="startCamera\(\)"[^>]*>[\s\S]*?카메라로 촬영[\s\S]*?<\/button>/);
   assert.match(html, /<button[^>]*type="button"[^>]*onclick="startCamera\(\)"[^>]*>/);
   assert.match(html, /<video[^>]*id="cameraPreview"[^>]*autoplay[^>]*playsinline[^>]*>/);
   assert.match(html, /<button[^>]*type="button"[^>]*onclick="captureCameraPhoto\(\)"[^>]*>/);
   assert.match(html, /navigator\.mediaDevices\.getUserMedia/);
+});
+
+test("allows larger compressed photos for high-quality camera uploads", async () => {
+  const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
+  const observations = await readFile(new URL("../lib/observations.ts", import.meta.url), "utf8");
+  const route = await readFile(new URL("../app/api/observations/route.ts", import.meta.url), "utf8");
+  assert.match(html, /const MAX_SOURCE_BYTES = 20 \* 1024 \* 1024/);
+  assert.match(html, /const MAX_OUTPUT_BYTES = 6 \* 1024 \* 1024/);
+  assert.match(html, /const IMAGE_MAX_SIDE = 2560/);
+  assert.match(html, /const IMAGE_QUALITY = 0\.9/);
+  assert.match(observations, /photo\.size > 6 \* 1024 \* 1024/);
+  assert.match(route, /contentLength > 8 \* 1024 \* 1024/);
 });
 
 test("keeps an Android gallery JPEG with a nonstandard MIME attached through submission", async () => {
@@ -140,7 +161,7 @@ globalThis.__photoFlow = { previewPhoto, submitObservation };`,
     files: [new File([Uint8Array.from([0xff, 0xd8, 0xff, 0xd9])], "gallery.jpg", { type: "application/octet-stream" })],
     value: "gallery.jpg",
   });
-  await context.__photoFlow.previewPhoto({ target: galleryInput });
+  await context.__photoFlow.previewPhoto({ target: galleryInput }, "gallery");
   await context.__photoFlow.submitObservation({ preventDefault() {} });
 
   assert.equal(requests.length, 1, "gallery photo should reach the observation API");
