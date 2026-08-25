@@ -82,6 +82,9 @@ OAuth 클라이언트 보안 비밀번호는 `SESSION_SECRET`에서 파생한 �
 
 ## 배포 환경
 
+- 운영 주소: https://gongju-moon-observation.1226ijs.workers.dev
+- 플랫폼: Cloudflare Workers (vinext)
+
 필수 바인딩·설정:
 
 - D1 `DB`
