@@ -199,18 +199,23 @@
 
           <div>
             <span class="block text-sm font-bold">달 사진</span>
-            <label class="mt-2 block cursor-pointer rounded-2xl border-2 border-dashed border-space-600 bg-space-900/70 p-5 text-center transition hover:border-amber-400">
-              <input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" required class="sr-only" onchange="previewPhoto(event)">
-              <div id="photoPlaceholder">
-                <div class="text-4xl" aria-hidden="true">📷</div>
-                <p class="mt-2 font-black">사진 촬영 또는 파일 선택</p>
-                <p class="mt-1 text-xs text-slate-500">JPG · PNG · WebP, 원본 12MB 이하</p>
-              </div>
-              <div id="photoPreviewWrap" class="hidden">
-                <img id="photoPreview" alt="선택한 달 사진 미리보기" class="mx-auto max-h-72 rounded-xl border border-amber-400/30 object-contain">
-                <p class="mt-2 text-xs font-bold text-amber-300">사진을 바꾸려면 다시 눌러 주세요.</p>
-              </div>
-            </label>
+            <input id="photoInputCamera" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" class="sr-only" onchange="previewPhoto(event)">
+            <input id="photoInputGallery" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" onchange="previewPhoto(event)">
+            <div class="mt-2 grid gap-3 sm:grid-cols-2">
+              <label for="photoInputCamera" class="block cursor-pointer rounded-2xl border-2 border-dashed border-space-600 bg-space-900/70 p-5 text-center transition hover:border-amber-400">
+                <span class="font-black"><span aria-hidden="true">📷</span> 사진 촬영</span>
+              </label>
+              <label for="photoInputGallery" class="block cursor-pointer rounded-2xl border-2 border-dashed border-space-600 bg-space-900/70 p-5 text-center transition hover:border-amber-400">
+                <span class="font-black"><span aria-hidden="true">🖼️</span> 갤러리에서 선택</span>
+              </label>
+            </div>
+            <div id="photoPlaceholder" class="mt-3 text-center">
+              <p class="text-xs text-slate-500">JPG · PNG · WebP, 원본 12MB 이하</p>
+            </div>
+            <div id="photoPreviewWrap" class="mt-3 hidden text-center">
+              <img id="photoPreview" alt="선택한 달 사진 미리보기" class="mx-auto max-h-72 rounded-xl border border-amber-400/30 object-contain">
+              <p class="mt-2 text-xs font-bold text-amber-300">사진을 바꾸려면 위의 촬영 또는 갤러리 버튼을 다시 눌러 주세요.</p>
+            </div>
           </div>
 
           <label class="block text-sm font-bold">관찰 기록 <span class="font-normal text-slate-500">(선택)</span>
@@ -651,17 +656,26 @@
 
     async function previewPhoto(event) {
       const file = event.target.files && event.target.files[0];
-      if (!file) return;
+      if (!file || file.size === 0) {
+        event.target.value = '';
+        showSubmitStatus('달 사진을 선택하지 못했습니다. 다시 시도해 주세요.', true);
+        return;
+      }
       compressedImageBlob = null;
       pendingRequestId = '';
-      if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
-        showSubmitStatus('JPG, PNG 또는 WebP 사진을 선택해 주세요.', true);
+      if (!file.type || /^image\/(heic|heif)$/i.test(file.type)) {
         event.target.value = '';
+        showSubmitStatus('JPG, PNG 또는 WebP 사진을 선택해 주세요. HEIC/HEIF 형식은 지원하지 않습니다.', true);
+        return;
+      }
+      if (!/^image\/(jpeg|png|webp)$/i.test(file.type)) {
+        event.target.value = '';
+        showSubmitStatus('JPG, PNG 또는 WebP 사진을 선택해 주세요.', true);
         return;
       }
       if (file.size > MAX_SOURCE_BYTES) {
-        showSubmitStatus('원본 사진은 12MB 이하여야 합니다.', true);
         event.target.value = '';
+        showSubmitStatus('원본 사진은 12MB 이하여야 합니다.', true);
         return;
       }
 
@@ -675,8 +689,9 @@
         document.getElementById('photoPreviewWrap').classList.remove('hidden');
         hideSubmitStatus();
       } catch (error) {
-        event.target.value = '';
         showSubmitStatus(error.message || '사진을 읽지 못했습니다.', true);
+      } finally {
+        event.target.value = '';
       }
     }
 
@@ -700,7 +715,7 @@
             context.drawImage(image, 0, 0, width, height);
             canvas.toBlob((blob) => {
               URL.revokeObjectURL(objectUrl);
-              if (!blob) {
+              if (!blob || blob.size === 0) {
                 reject(new Error('사진을 압축하지 못했습니다.'));
               } else if (blob.size > 3 * 1024 * 1024) {
                 reject(new Error('압축한 사진이 3MB를 넘습니다. 더 작은 사진을 선택해 주세요.'));
@@ -753,6 +768,8 @@
         if (!response.ok) throw new Error(result.message || '사진을 제출하지 못했습니다.');
         showSubmitStatus(result.message || '사진을 제출했습니다.', false, true);
         document.getElementById('observationForm').reset();
+        document.getElementById('photoInputCamera').value = '';
+        document.getElementById('photoInputGallery').value = '';
         compressedImageBlob = null;
         pendingRequestId = '';
         if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);

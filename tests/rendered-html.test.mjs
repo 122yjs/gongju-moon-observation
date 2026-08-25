@@ -37,6 +37,17 @@ test("keeps student PII out of long-lived central D1 tables", async () => {
   assert.doesNotMatch(migration, /student_name|student_number|observed_at|\bmemo\b|image_bytes/);
 });
 
+test("exposes separate camera and gallery photo inputs for students", async () => {
+  const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
+  assert.match(html, /<input[^>]*id="photoInputCamera"[^>]*>/);
+  assert.match(html, /<input[^>]*id="photoInputGallery"[^>]*>/);
+  assert.match(html, /<input[^>]*id="photoInputCamera"[^>]*capture="environment"[^>]*>/);
+  assert.doesNotMatch(html, /<input[^>]*id="photoInputGallery"[^>]*capture=/);
+  assert.match(html, /<input[^>]*id="photoInputCamera"[^>]*onchange="previewPhoto\(event\)"[^>]*>/);
+  assert.match(html, /<input[^>]*id="photoInputGallery"[^>]*onchange="previewPhoto\(event\)"[^>]*>/);
+});
+
+
 test("protects OAuth and class sessions and keeps the student session for 60 days", async () => {
   const auth = await readFile(new URL("../lib/auth.ts", import.meta.url), "utf8");
   const start = await readFile(new URL("../app/api/google/start/route.ts", import.meta.url), "utf8");
