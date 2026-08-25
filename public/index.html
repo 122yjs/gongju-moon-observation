@@ -199,22 +199,16 @@
 
           <div>
             <span class="block text-sm font-bold">달 사진</span>
-            <input id="photoInputCamera" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" class="sr-only" onchange="previewPhoto(event)">
-            <input id="photoInputGallery" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" onchange="previewPhoto(event)">
-            <div class="mt-2 grid gap-3 sm:grid-cols-2">
-              <label for="photoInputCamera" class="block cursor-pointer rounded-2xl border-2 border-dashed border-space-600 bg-space-900/70 p-5 text-center transition hover:border-amber-400">
-                <span class="font-black"><span aria-hidden="true">📷</span> 사진 촬영</span>
-              </label>
-              <label for="photoInputGallery" class="block cursor-pointer rounded-2xl border-2 border-dashed border-space-600 bg-space-900/70 p-5 text-center transition hover:border-amber-400">
-                <span class="font-black"><span aria-hidden="true">🖼️</span> 갤러리에서 선택</span>
-              </label>
-            </div>
+            <label for="photoInput" class="mt-2 block cursor-pointer rounded-2xl border-2 border-dashed border-space-600 bg-space-900/70 p-5 text-center transition hover:border-amber-400">
+              <input id="photoInput" type="file" accept="image/*" class="sr-only" onchange="previewPhoto(event)">
+              <span class="font-black"><span aria-hidden="true">📷</span> 사진 촬영 또는 갤러리 선택</span>
+            </label>
             <div id="photoPlaceholder" class="mt-3 text-center">
-              <p class="text-xs text-slate-500">JPG · PNG · WebP, 원본 12MB 이하</p>
+              <p class="text-xs text-slate-500">휴대폰의 기본 사진 선택창을 사용해요 · 원본 12MB 이하</p>
             </div>
             <div id="photoPreviewWrap" class="mt-3 hidden text-center">
               <img id="photoPreview" alt="선택한 달 사진 미리보기" class="mx-auto max-h-72 rounded-xl border border-amber-400/30 object-contain">
-              <p class="mt-2 text-xs font-bold text-amber-300">사진을 바꾸려면 위의 촬영 또는 갤러리 버튼을 다시 눌러 주세요.</p>
+              <p class="mt-2 text-xs font-bold text-amber-300">사진을 바꾸려면 위 버튼을 다시 눌러 주세요.</p>
             </div>
           </div>
 
@@ -663,12 +657,12 @@
       }
       compressedImageBlob = null;
       pendingRequestId = '';
-      if (!file.type || /^image\/(heic|heif)$/i.test(file.type)) {
+      if (/^image\/(heic|heif)$/i.test(file.type)) {
         event.target.value = '';
         showSubmitStatus('JPG, PNG 또는 WebP 사진을 선택해 주세요. HEIC/HEIF 형식은 지원하지 않습니다.', true);
         return;
       }
-      if (!/^image\/(jpeg|png|webp)$/i.test(file.type)) {
+      if (file.type && !/^image\/(jpeg|jpg|png|webp)$/i.test(file.type)) {
         event.target.value = '';
         showSubmitStatus('JPG, PNG 또는 WebP 사진을 선택해 주세요.', true);
         return;
@@ -768,8 +762,7 @@
         if (!response.ok) throw new Error(result.message || '사진을 제출하지 못했습니다.');
         showSubmitStatus(result.message || '사진을 제출했습니다.', false, true);
         document.getElementById('observationForm').reset();
-        document.getElementById('photoInputCamera').value = '';
-        document.getElementById('photoInputGallery').value = '';
+        document.getElementById('photoInput').value = '';
         compressedImageBlob = null;
         pendingRequestId = '';
         if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
