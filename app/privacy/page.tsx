@@ -4,7 +4,7 @@ export default function PrivacyPage() {
   return (
     <main className="min-h-screen bg-space-950 px-5 py-10 text-slate-100">
       <article className="mx-auto max-w-3xl rounded-3xl border border-space-700 bg-space-800 p-6 shadow-card sm:p-8">
-        <p className="text-xs font-bold text-amber-300">공주 달 관찰 탐험대</p>
+        <p className="text-xs font-bold text-amber-300">달 관찰 탐험대</p>
         <h1 className="mt-1 text-3xl font-black">개인정보 처리 안내</h1>
         <p className="mt-5 text-sm leading-7 text-slate-300">이 서비스는 교사가 연결한 Google Drive에 학생 관찰 자료를 수합하기 위한 중앙 웹앱입니다.</p>
 

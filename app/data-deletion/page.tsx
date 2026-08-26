@@ -4,7 +4,7 @@ export default function DataDeletionPage() {
   return (
     <main className="min-h-screen bg-space-950 px-5 py-10 text-slate-100">
       <article className="mx-auto max-w-3xl rounded-3xl border border-space-700 bg-space-800 p-6 shadow-card sm:p-8">
-        <p className="text-xs font-bold text-amber-300">공주 달 관찰 탐험대</p>
+        <p className="text-xs font-bold text-amber-300">달 관찰 탐험대</p>
         <h1 className="mt-1 text-3xl font-black">연결 및 자료 삭제 안내</h1>
         <h2 className="mt-7 text-xl font-black">교사 Google 연결 삭제</h2>
         <p className="mt-2 text-sm leading-7 text-slate-300">교사 관리 화면에서 <strong>Drive 연결 해제</strong>를 선택하면 중앙 D1의 교사 연결정보·암호화 토큰·학생 QR 설정이 삭제되고 Google OAuth 토큰이 폐기됩니다.</p>

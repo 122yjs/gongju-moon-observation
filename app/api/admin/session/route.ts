@@ -20,6 +20,11 @@ export async function GET(request: Request) {
         displayName: teacher.googleDisplayName,
         email: teacher.googleEmail,
         classLabel: teacher.classLabel,
+        regionLabel: teacher.regionLabel,
+        regionShortLabel: teacher.regionShortLabel,
+        observationLat: teacher.observationLat,
+        observationLon: teacher.observationLon,
+        regionSettingsRequired: !teacher.regionSettingsCompletedAt,
       },
     });
   } catch (error) {

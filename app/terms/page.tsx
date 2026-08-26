@@ -4,7 +4,7 @@ export default function TermsPage() {
   return (
     <main className="min-h-screen bg-space-950 px-5 py-10 text-slate-100">
       <article className="mx-auto max-w-3xl rounded-3xl border border-space-700 bg-space-800 p-6 shadow-card sm:p-8">
-        <p className="text-xs font-bold text-amber-300">공주 달 관찰 탐험대</p>
+        <p className="text-xs font-bold text-amber-300">달 관찰 탐험대</p>
         <h1 className="mt-1 text-3xl font-black">서비스 이용 안내</h1>
         <p className="mt-5 text-sm leading-7 text-slate-300">이 서비스는 학교 과학 관찰 활동을 돕기 위한 수업용 도구입니다. 교사는 학생과 보호자에게 활동 목적, 제출 범위, 보관 기간을 안내하고 필요한 학교 내부 절차를 확인해야 합니다.</p>
         <h2 className="mt-7 text-xl font-black">교사의 책임</h2>

@@ -2,6 +2,11 @@ import { decryptString, encryptString } from "./crypto";
 import { HttpError } from "./http";
 import { getEnv } from "./runtime";
 
+export const DEFAULT_REGION_LABEL = "관찰 지역";
+export const DEFAULT_REGION_SHORT_LABEL = "지역";
+export const DEFAULT_OBSERVATION_LAT = 36.5;
+export const DEFAULT_OBSERVATION_LON = 127.5;
+
 export interface OAuthConfig {
   clientId: string;
   clientSecret: string;
@@ -16,6 +21,11 @@ export interface TeacherAccount {
   refreshTokenCiphertext: string;
   accessTokenCiphertext: string | null;
   accessTokenExpiresAt: string | null;
+  regionLabel: string;
+  regionShortLabel: string;
+  observationLat: number;
+  observationLon: number;
+  regionSettingsCompletedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -29,6 +39,11 @@ export interface TeacherConnection {
   refreshTokenCiphertext: string;
   accessTokenCiphertext: string | null;
   accessTokenExpiresAt: string | null;
+  regionLabel: string;
+  regionShortLabel: string;
+  observationLat: number;
+  observationLon: number;
+  regionSettingsCompletedAt: string | null;
   rootFolderId: string;
   photosFolderId: string;
   spreadsheetId: string;
@@ -64,6 +79,11 @@ interface TeacherAccountRow {
   refresh_token_ciphertext: string;
   access_token_ciphertext: string | null;
   access_token_expires_at: string | null;
+  region_label?: string | null;
+  region_short_label?: string | null;
+  observation_lat?: number | null;
+  observation_lon?: number | null;
+  region_settings_completed_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -94,6 +114,11 @@ interface TeacherRow {
   account_refresh_token_ciphertext: string | null;
   account_access_token_ciphertext: string | null;
   account_access_token_expires_at: string | null;
+  account_region_label: string | null;
+  account_region_short_label: string | null;
+  account_observation_lat: number | null;
+  account_observation_lon: number | null;
+  account_region_settings_completed_at: string | null;
 }
 
 interface TeacherClassRow {
@@ -114,6 +139,11 @@ function mapAccount(row: TeacherAccountRow): TeacherAccount {
     refreshTokenCiphertext: row.refresh_token_ciphertext,
     accessTokenCiphertext: row.access_token_ciphertext,
     accessTokenExpiresAt: row.access_token_expires_at,
+    regionLabel: row.region_label || DEFAULT_REGION_LABEL,
+    regionShortLabel: row.region_short_label || DEFAULT_REGION_SHORT_LABEL,
+    observationLat: Number(row.observation_lat ?? DEFAULT_OBSERVATION_LAT),
+    observationLon: Number(row.observation_lon ?? DEFAULT_OBSERVATION_LON),
+    regionSettingsCompletedAt: row.region_settings_completed_at || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -130,6 +160,11 @@ function mapTeacher(row: TeacherRow): TeacherConnection {
     refreshTokenCiphertext: row.account_refresh_token_ciphertext || row.refresh_token_ciphertext,
     accessTokenCiphertext: row.account_access_token_ciphertext ?? row.access_token_ciphertext,
     accessTokenExpiresAt: row.account_access_token_expires_at ?? row.access_token_expires_at,
+    regionLabel: row.account_region_label || DEFAULT_REGION_LABEL,
+    regionShortLabel: row.account_region_short_label || DEFAULT_REGION_SHORT_LABEL,
+    observationLat: Number(row.account_observation_lat ?? DEFAULT_OBSERVATION_LAT),
+    observationLon: Number(row.account_observation_lon ?? DEFAULT_OBSERVATION_LON),
+    regionSettingsCompletedAt: row.account_region_settings_completed_at || null,
     rootFolderId: row.root_folder_id,
     photosFolderId: row.photos_folder_id,
     spreadsheetId: row.spreadsheet_id,
@@ -219,7 +254,12 @@ async function findTeacher(where: string, value: string) {
        ta.google_display_name AS account_google_display_name,
        ta.refresh_token_ciphertext AS account_refresh_token_ciphertext,
        ta.access_token_ciphertext AS account_access_token_ciphertext,
-       ta.access_token_expires_at AS account_access_token_expires_at
+       ta.access_token_expires_at AS account_access_token_expires_at,
+       ta.region_label AS account_region_label,
+       ta.region_short_label AS account_region_short_label,
+       ta.observation_lat AS account_observation_lat,
+       ta.observation_lon AS account_observation_lon,
+       ta.region_settings_completed_at AS account_region_settings_completed_at
      FROM teacher_connections tc
      LEFT JOIN teacher_accounts ta
        ON ta.id = CASE WHEN tc.account_id = '' THEN tc.id ELSE tc.account_id END
@@ -285,8 +325,9 @@ export async function createTeacherAccount(input: {
     `INSERT INTO teacher_accounts (
        id, google_permission_id, google_email, google_display_name,
        refresh_token_ciphertext, access_token_ciphertext, access_token_expires_at,
+       region_label, region_short_label, observation_lat, observation_lon, region_settings_completed_at,
        created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL, ?, ?)`,
   )
     .bind(
       id,
@@ -294,6 +335,10 @@ export async function createTeacherAccount(input: {
       input.googleEmail,
       input.googleDisplayName,
       refreshTokenCiphertext,
+      DEFAULT_REGION_LABEL,
+      DEFAULT_REGION_SHORT_LABEL,
+      DEFAULT_OBSERVATION_LAT,
+      DEFAULT_OBSERVATION_LON,
       now,
       now,
     )
@@ -331,6 +376,60 @@ export async function reconnectTeacherAccount(
   const updated = await getTeacherAccountById(account.id);
   if (!updated) throw new Error("교사 계정 연결 정보를 갱신하지 못했습니다.");
   return updated;
+}
+
+function normalizeRegionLabel(value: unknown, fieldName: string, maxLength: number) {
+  if (typeof value !== "string") throw new HttpError(400, `${fieldName}을 입력해 주세요.`);
+  const normalized = value.normalize("NFC").trim();
+  if (normalized.length < 1 || Array.from(normalized).length > maxLength || /\p{Cc}/u.test(normalized)) {
+    throw new HttpError(400, `${fieldName}은 1자부터 ${maxLength}자까지 입력해 주세요.`);
+  }
+  return normalized;
+}
+
+function normalizeCoordinate(value: unknown, fieldName: string, min: number, max: number) {
+  const numberValue = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numberValue) || numberValue < min || numberValue > max) {
+    throw new HttpError(400, `${fieldName} 범위를 확인해 주세요.`);
+  }
+  return Math.round(numberValue * 10_000) / 10_000;
+}
+
+export async function updateAccountRegionSettings(
+  accountId: string,
+  input: {
+    regionLabel: unknown;
+    regionShortLabel: unknown;
+    observationLat: unknown;
+    observationLon: unknown;
+  },
+) {
+  const regionLabel = normalizeRegionLabel(input.regionLabel, "관찰 기준 지역명", 40);
+  const regionShortLabel = normalizeRegionLabel(input.regionShortLabel, "짧은 지역명", 20);
+  const observationLat = normalizeCoordinate(input.observationLat, "위도", -90, 90);
+  const observationLon = normalizeCoordinate(input.observationLon, "경도", -180, 180);
+  const now = new Date().toISOString();
+  await getEnv().DB.prepare(
+    `UPDATE teacher_accounts SET
+       region_label = ?,
+       region_short_label = ?,
+       observation_lat = ?,
+       observation_lon = ?,
+       region_settings_completed_at = COALESCE(region_settings_completed_at, ?),
+       updated_at = ?
+     WHERE id = ?`,
+  )
+    .bind(regionLabel, regionShortLabel, observationLat, observationLon, now, now, accountId)
+    .run();
+  const updated = await getTeacherAccountById(accountId);
+  if (!updated) throw new Error("지역 설정을 저장하지 못했습니다.");
+  return {
+    regionLabel: updated.regionLabel,
+    regionShortLabel: updated.regionShortLabel,
+    observationLat: updated.observationLat,
+    observationLon: updated.observationLon,
+    regionSettingsCompletedAt: updated.regionSettingsCompletedAt,
+  };
 }
 
 export async function createTeacherClass(input: {

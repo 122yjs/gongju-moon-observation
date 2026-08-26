@@ -39,7 +39,7 @@ function createElement(properties = {}) {
 test("builds the moon observation app without external runtime CSS", async () => {
   const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
   const css = await readFile(new URL("../dist/client/app.css", import.meta.url), "utf8");
-  assert.match(html, /<title>공주 달 관찰 탐험대<\/title>/);
+  assert.match(html, /<title>달 관찰 탐험대<\/title>/);
   assert.match(html, /href="\/app\.css"/);
   assert.ok(css.length > 20_000, "compiled Tailwind CSS should be present");
   assert.doesNotMatch(html, /cdn\.tailwindcss\.com|fonts\.googleapis\.com|google\.script\.run/);
@@ -101,6 +101,26 @@ test("preserves existing class folders while splitting Google accounts from clas
   assert.match(classesRoute, /마지막 반은 삭제할 수 없습니다/);
 });
 
+test("stores account-level observation region settings for the student UI", async () => {
+  const migration = await readFile(new URL("../drizzle/0003_teacher_account_region_settings.sql", import.meta.url), "utf8");
+  const schema = await readFile(new URL("../db/schema.ts", import.meta.url), "utf8");
+  const tenant = await readFile(new URL("../lib/tenant.ts", import.meta.url), "utf8");
+  const settingsRoute = await readFile(new URL("../app/api/admin/settings/route.ts", import.meta.url), "utf8");
+  const inviteRoute = await readFile(new URL("../app/api/admin/invite/route.ts", import.meta.url), "utf8");
+  const sessionRoute = await readFile(new URL("../app/api/session/route.ts", import.meta.url), "utf8");
+  assert.match(migration, /ALTER TABLE `teacher_accounts` ADD `region_label`/);
+  assert.match(migration, /ALTER TABLE `teacher_accounts` ADD `region_short_label`/);
+  assert.match(migration, /ALTER TABLE `teacher_accounts` ADD `observation_lat` real/);
+  assert.match(migration, /ALTER TABLE `teacher_accounts` ADD `observation_lon` real/);
+  assert.match(schema, /regionLabel: text\("region_label"\)/);
+  assert.match(schema, /observationLat: real\("observation_lat"\)/);
+  assert.match(tenant, /function updateAccountRegionSettings/);
+  assert.match(settingsRoute, /updateAccountRegionSettings\(teacher\.accountId/);
+  assert.match(inviteRoute, /regionSettingsRequired: !teacher\.regionSettingsCompletedAt/);
+  assert.match(sessionRoute, /regionLabel: teacher\.regionLabel/);
+  assert.match(sessionRoute, /observationLat: teacher\.observationLat/);
+});
+
 test("lets the admin choose and regenerate QR codes per class", async () => {
   const inviteRoute = await readFile(new URL("../app/api/admin/invite/route.ts", import.meta.url), "utf8");
   const adminPage = await readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8");
@@ -125,11 +145,48 @@ test("lets the admin choose and regenerate QR codes per class", async () => {
   assert.match(adminPage, /이미 입장한 기기의 60일 학생 세션은 유지됩니다/);
 });
 
+test("renders the student-facing class name from the active session", async () => {
+  const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
+  const sessionRoute = await readFile(new URL("../app/api/session/route.ts", import.meta.url), "utf8");
+  assert.match(html, /id="studentClassHeaderLabel"[^>]*>📍 관찰 지역 기준 · 수업 참여 전</);
+  assert.match(html, /id="submitClassLabel"[^>]*>우리 반</);
+  assert.match(html, /const DEFAULT_CLASS_LABEL = '우리 반'/);
+  assert.match(html, /function setClassroomContext\(context\)/);
+  assert.match(html, /setClassroomContext\(sessionContext\)/);
+  assert.match(html, /badge\.textContent = currentClassLabel/);
+  assert.match(sessionRoute, /classLabel: teacher\.classLabel/);
+  assert.doesNotMatch(html, /초등 4학년 1반|<strong>4학년 1반<\/strong>|badge\.textContent = '4학년 1반'/);
+});
+
+test("keeps Korean place names out of static student and policy pages", async () => {
+  const files = [
+    "../dist/client/index.html",
+    "../public/tenant-label.js",
+    "../app/layout.tsx",
+    "../app/page.tsx",
+    "../app/join/page.tsx",
+    "../app/privacy/page.tsx",
+    "../app/terms/page.tsx",
+    "../app/data-deletion/page.tsx",
+  ];
+  const contents = await Promise.all(files.map((file) => readFile(new URL(file, import.meta.url), "utf8")));
+  for (const content of contents) {
+    assert.doesNotMatch(content, /공주시|공주 달 관찰 탐험대|공주 하늘 달력|GONGJU_/);
+  }
+  const html = contents[0];
+  assert.match(html, /regionLabel/);
+  assert.match(html, /currentObservationLat/);
+  assert.match(html, /formatLatitude/);
+});
+
 test("clarifies admin sign-out and Drive disconnect actions with short help text", async () => {
   const adminPage = await readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8");
   assert.match(adminPage, /onMouseEnter=\{\(\) => setOpen\(true\)\}/);
   assert.match(adminPage, /aria-expanded=\{open\}/);
   assert.match(adminPage, /Google Drive 연결하기/);
+  assert.match(adminPage, /Google Drive를 처음 연결한 뒤 학생 화면에 표시할 지역명과 달 계산 기준 좌표를 설정합니다/);
+  assert.match(adminPage, /관찰 지역 설정/);
+  assert.match(adminPage, /같은 Google 계정의 모든 반에 적용됩니다/);
   assert.match(adminPage, /교사 Google 계정을 이 서비스에 연결합니다/);
   assert.match(adminPage, /이 브라우저의 교사 화면 세션만 종료합니다/);
   assert.match(adminPage, /같은 계정으로 다시 연결하면 기존 반 목록으로 돌아옵니다/);

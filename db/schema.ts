@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 // 이전 R2/D1 배포 자료를 삭제할 때만 읽는 호환 테이블입니다.
 // 새 제출은 이 테이블에 기록하지 않습니다.
@@ -47,6 +47,11 @@ export const teacherAccounts = sqliteTable(
     refreshTokenCiphertext: text("refresh_token_ciphertext").notNull(),
     accessTokenCiphertext: text("access_token_ciphertext"),
     accessTokenExpiresAt: text("access_token_expires_at"),
+    regionLabel: text("region_label").notNull().default("관찰 지역"),
+    regionShortLabel: text("region_short_label").notNull().default("지역"),
+    observationLat: real("observation_lat").notNull().default(36.5),
+    observationLon: real("observation_lon").notNull().default(127.5),
+    regionSettingsCompletedAt: text("region_settings_completed_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },

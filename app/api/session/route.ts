@@ -11,15 +11,38 @@ import { getTeacherById, getTeacherByInviteHash } from "../../../lib/tenant";
 export async function GET(request: Request) {
   try {
     const session = await getStudentSession(request);
-    if (!session?.teacherId) return json({ authenticated: false, classLabel: null });
+    if (!session?.teacherId) {
+      return json({
+        authenticated: false,
+        classLabel: null,
+        regionLabel: null,
+        regionShortLabel: null,
+        observationLat: null,
+        observationLon: null,
+      });
+    }
     const teacher = await getTeacherById(session.teacherId);
     if (!teacher) {
       return json(
-        { authenticated: false, classLabel: null },
+        {
+          authenticated: false,
+          classLabel: null,
+          regionLabel: null,
+          regionShortLabel: null,
+          observationLat: null,
+          observationLon: null,
+        },
         { headers: { "Set-Cookie": clearStudentCookie() } },
       );
     }
-    return json({ authenticated: true, classLabel: teacher.classLabel });
+    return json({
+      authenticated: true,
+      classLabel: teacher.classLabel,
+      regionLabel: teacher.regionLabel,
+      regionShortLabel: teacher.regionShortLabel,
+      observationLat: teacher.observationLat,
+      observationLon: teacher.observationLon,
+    });
   } catch (error) {
     return errorResponse(error);
   }
@@ -38,7 +61,14 @@ export async function POST(request: Request) {
       throw new HttpError(401, "유효하지 않거나 만료된 수업 참여 링크입니다.");
     }
     return json(
-      { ok: true, classLabel: teacher.classLabel },
+      {
+        ok: true,
+        classLabel: teacher.classLabel,
+        regionLabel: teacher.regionLabel,
+        regionShortLabel: teacher.regionShortLabel,
+        observationLat: teacher.observationLat,
+        observationLon: teacher.observationLon,
+      },
       { headers: { "Set-Cookie": await createStudentCookie(teacher.id) } },
     );
   } catch (error) {

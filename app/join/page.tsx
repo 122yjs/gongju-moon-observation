@@ -40,7 +40,7 @@ export default function JoinPage() {
     <main className="grid min-h-screen place-items-center bg-space-950 px-5 text-slate-100">
       <section className="w-full max-w-md rounded-3xl border border-space-700 bg-space-800 p-7 text-center shadow-card">
         <div className="text-6xl" aria-hidden="true">{failed ? "🌑" : "🌙"}</div>
-        <h1 className="mt-5 text-2xl font-black">공주 달 관찰 탐험대</h1>
+        <h1 className="mt-5 text-2xl font-black">달 관찰 탐험대</h1>
         <p className={`mt-4 text-sm leading-7 ${failed ? "text-red-200" : "text-slate-300"}`} role="status">
           {message}
         </p>

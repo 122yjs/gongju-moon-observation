@@ -54,6 +54,11 @@ async function responseFor(request: Request, teacher: Awaited<ReturnType<typeof 
     googleDisplayName: teacher.googleDisplayName,
     rootFolderUrl: `https://drive.google.com/drive/folders/${teacher.rootFolderId}`,
     spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${teacher.spreadsheetId}/edit`,
+    regionLabel: teacher.regionLabel,
+    regionShortLabel: teacher.regionShortLabel,
+    observationLat: teacher.observationLat,
+    observationLon: teacher.observationLon,
+    regionSettingsRequired: !teacher.regionSettingsCompletedAt,
     sessionDays: 60,
     classes: visibleClasses,
   };

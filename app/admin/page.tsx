@@ -35,6 +35,11 @@ interface InviteInfo {
   googleDisplayName: string;
   rootFolderUrl: string;
   spreadsheetUrl: string;
+  regionLabel: string;
+  regionShortLabel: string;
+  observationLat: number;
+  observationLon: number;
+  regionSettingsRequired: boolean;
   sessionDays: number;
   classes: ClassInfo[];
 }
@@ -93,6 +98,10 @@ export default function AdminPage() {
   const [classLabel, setClassLabel] = useState("우리 반");
   const [newClassLabel, setNewClassLabel] = useState("");
   const [qrClassId, setQrClassId] = useState<string | null>(null);
+  const [regionLabel, setRegionLabel] = useState("관찰 지역");
+  const [regionShortLabel, setRegionShortLabel] = useState("지역");
+  const [observationLat, setObservationLat] = useState("36.5");
+  const [observationLon, setObservationLon] = useState("127.5");
 
   const loadData = useCallback(async (nextCursor: string | null = null, append = false) => {
     setLoading(true);
@@ -115,6 +124,10 @@ export default function AdminPage() {
       setHasMore(records.hasMore);
       setInvite(inviteResult);
       setClassLabel(inviteResult.classLabel);
+      setRegionLabel(inviteResult.regionLabel);
+      setRegionShortLabel(inviteResult.regionShortLabel);
+      setObservationLat(String(inviteResult.observationLat));
+      setObservationLon(String(inviteResult.observationLon));
       setQrClassId((current) =>
         current && inviteResult.classes.some((teacherClass) => teacherClass.id === current)
           ? current
@@ -158,6 +171,43 @@ export default function AdminPage() {
         : teacherClass),
     } : current);
     setMessage("학급명을 저장했습니다.");
+  }
+
+  async function saveRegionSettings(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const response = await fetch("/api/admin/settings", {
+      method: "PATCH",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        regionLabel,
+        regionShortLabel,
+        observationLat: Number(observationLat),
+        observationLon: Number(observationLon),
+      }),
+    });
+    const result = (await response.json().catch(() => ({}))) as {
+      regionLabel?: string;
+      regionShortLabel?: string;
+      observationLat?: number;
+      observationLon?: number;
+      regionSettingsRequired?: boolean;
+      message?: string;
+    };
+    if (!response.ok) return setMessage(result.message || "관찰 지역 설정을 저장하지 못했습니다.");
+    setRegionLabel(result.regionLabel || regionLabel);
+    setRegionShortLabel(result.regionShortLabel || regionShortLabel);
+    setObservationLat(String(result.observationLat ?? observationLat));
+    setObservationLon(String(result.observationLon ?? observationLon));
+    setInvite((current) => current ? {
+      ...current,
+      regionLabel: result.regionLabel || regionLabel,
+      regionShortLabel: result.regionShortLabel || regionShortLabel,
+      observationLat: result.observationLat ?? current.observationLat,
+      observationLon: result.observationLon ?? current.observationLon,
+      regionSettingsRequired: Boolean(result.regionSettingsRequired),
+    } : current);
+    setMessage("관찰 지역 설정을 저장했습니다.");
   }
 
   async function rotateInvite() {
@@ -307,6 +357,9 @@ export default function AdminPage() {
           <p className="mt-4 text-sm leading-7 text-slate-300">
             앱이 새로 만드는 수업 폴더·사진·스프레드시트만 관리합니다. 학생 사진·이름·메모는 중앙 D1이나 R2에 장기 저장하지 않습니다.
           </p>
+          <p className="mt-4 rounded-xl border border-blue-400/20 bg-blue-400/10 p-3 text-xs leading-5 text-blue-100">
+            Google Drive를 처음 연결한 뒤 학생 화면에 표시할 지역명과 달 계산 기준 좌표를 설정합니다.
+          </p>
           {message ? <p className="mt-4 rounded-xl border border-red-400/25 bg-red-400/10 p-3 text-sm text-red-200" role="alert">{message}</p> : null}
           <div className="mt-6 flex items-center gap-2">
             <a
@@ -363,6 +416,11 @@ export default function AdminPage() {
         </header>
 
         {message ? <p className="rounded-xl border border-blue-400/25 bg-blue-400/10 p-3 text-sm text-blue-100" role="status">{message}</p> : null}
+        {invite?.regionSettingsRequired ? (
+          <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm font-bold text-amber-100" role="status">
+            최초 연결 설정이 필요합니다. 학생 화면에 보일 지역명과 달 계산 기준 좌표를 저장해 주세요.
+          </p>
+        ) : null}
 
         <section className="grid gap-5 lg:grid-cols-[360px_1fr]">
           <div className="space-y-5">
@@ -474,6 +532,27 @@ export default function AdminPage() {
             <p className="mt-2 rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm leading-6 text-emerald-100">
               학생 원본 자료는 교사 소유 Google Drive에만 장기 보관됩니다.
             </p>
+            <form onSubmit={saveRegionSettings} className="mt-5 rounded-2xl border border-space-700 bg-space-900/70 p-4">
+              <div className="flex items-center gap-2">
+                <h3 className="font-black">관찰 지역 설정</h3>
+                <HelpTip label="학생 화면 제목, 기준 지역 문구, 달 관찰 시간 계산에 쓰는 값입니다. 같은 Google 계정의 모든 반에 적용됩니다." />
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="block text-sm font-bold">기준 지역명
+                  <input value={regionLabel} onChange={(event: ChangeEvent<HTMLInputElement>) => setRegionLabel(event.target.value)} maxLength={40} required placeholder="예: 우리 지역" className="mt-2 w-full rounded-xl border border-space-600 bg-space-950 px-4 py-3" />
+                </label>
+                <label className="block text-sm font-bold">짧은 지역명
+                  <input value={regionShortLabel} onChange={(event: ChangeEvent<HTMLInputElement>) => setRegionShortLabel(event.target.value)} maxLength={20} required placeholder="예: 지역" className="mt-2 w-full rounded-xl border border-space-600 bg-space-950 px-4 py-3" />
+                </label>
+                <label className="block text-sm font-bold">위도
+                  <input value={observationLat} onChange={(event: ChangeEvent<HTMLInputElement>) => setObservationLat(event.target.value)} type="number" step="0.0001" min="-90" max="90" required className="mt-2 w-full rounded-xl border border-space-600 bg-space-950 px-4 py-3" />
+                </label>
+                <label className="block text-sm font-bold">경도
+                  <input value={observationLon} onChange={(event: ChangeEvent<HTMLInputElement>) => setObservationLon(event.target.value)} type="number" step="0.0001" min="-180" max="180" required className="mt-2 w-full rounded-xl border border-space-600 bg-space-950 px-4 py-3" />
+                </label>
+              </div>
+              <button className="mt-4 w-full rounded-xl border border-amber-400/30 bg-amber-400/10 px-5 py-3 font-black text-amber-100 hover:bg-amber-400/20">관찰 지역 저장</button>
+            </form>
             <form onSubmit={saveClassLabel} className="mt-5 flex flex-col gap-2 sm:flex-row">
               <input value={classLabel} onChange={(event: ChangeEvent<HTMLInputElement>) => setClassLabel(event.target.value)} maxLength={40} required className="min-w-0 flex-1 rounded-xl border border-space-600 bg-space-900 px-4 py-3" aria-label="학급명" />
               <span className="flex items-center gap-1">

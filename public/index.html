@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>공주 달 관찰 탐험대</title>
-  <meta name="description" content="공주시 초등학생을 위한 달 모양·관찰 시간 확인과 사진 기록 활동">
-  <meta property="og:title" content="공주 달 관찰 탐험대">
+  <title>달 관찰 탐험대</title>
+  <meta name="description" content="초등학생을 위한 달 모양·관찰 시간 확인과 사진 기록 활동">
+  <meta property="og:title" content="달 관찰 탐험대">
   <meta property="og:description" content="달 모양을 살펴보고 관찰 사진을 기록해요">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://gongju-moon-observation.1226ijs.workers.dev/">
   <meta property="og:image" content="https://gongju-moon-observation.1226ijs.workers.dev/og.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="공주 달 관찰 탐험대">
+  <meta name="twitter:title" content="달 관찰 탐험대">
   <meta name="twitter:description" content="달 모양을 살펴보고 관찰 사진을 기록해요">
   <meta name="twitter:image" content="https://gongju-moon-observation.1226ijs.workers.dev/og.png">
   <link rel="stylesheet" href="/app.css">
@@ -72,8 +72,8 @@
         <div class="flex min-w-0 items-center gap-3">
           <div class="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-amber-400/30 bg-amber-400/10 text-2xl shadow-moon" aria-hidden="true">🌙</div>
           <div class="min-w-0">
-            <h1 class="truncate text-lg sm:text-xl font-black tracking-tight">공주 달 관찰 탐험대</h1>
-            <p class="truncate text-[11px] sm:text-xs text-slate-400">📍 공주시 기준 · 초등 4학년 1반</p>
+            <h1 id="studentAppTitle" class="truncate text-lg sm:text-xl font-black tracking-tight">달 관찰 탐험대</h1>
+            <p id="studentClassHeaderLabel" class="truncate text-[11px] sm:text-xs text-slate-400">📍 관찰 지역 기준 · 수업 참여 전</p>
           </div>
         </div>
         <span class="hidden sm:inline-flex rounded-full border border-blue-400/20 bg-blue-400/10 px-3 py-1 text-xs font-bold text-blue-200">과학 관찰 기록</span>
@@ -95,7 +95,7 @@
       <div class="rounded-3xl border border-space-700 bg-space-800/85 p-4 sm:p-5 shadow-card backdrop-blur">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <p class="text-xs font-bold text-amber-300">공주 하늘 달력</p>
+            <p id="moonCalendarLabel" class="text-xs font-bold text-amber-300">하늘 달력</p>
             <h2 id="todayHeading" class="mt-1 text-xl sm:text-2xl font-black">오늘의 달 모양과 관찰 시간</h2>
           </div>
           <div class="flex flex-wrap items-center gap-2">
@@ -147,7 +147,7 @@
             <h3 class="font-black text-blue-200">🔭 관찰 도움말</h3>
             <p id="observationTip" class="mt-2 text-sm leading-6 text-slate-300">달 정보를 계산하고 있어요.</p>
           </article>
-          <p class="px-1 text-[11px] leading-5 text-slate-500">※ 공주시 중심부(북위 36.4465°, 동경 127.1190°) 기준의 교육용 천문 계산값입니다. 지형과 대기 상태에 따라 실제 관찰 시각은 조금 달라질 수 있습니다.</p>
+          <p id="locationNote" class="px-1 text-[11px] leading-5 text-slate-500">※ 관찰 지역 기준 좌표의 교육용 천문 계산값입니다. 지형과 대기 상태에 따라 실제 관찰 시각은 조금 달라질 수 있습니다.</p>
         </div>
       </div>
     </section>
@@ -181,7 +181,7 @@
         <p class="text-xs font-bold text-amber-300">나의 관찰 기록 남기기</p>
         <h2 id="submitHeading" class="mt-1 text-2xl font-black">달 사진 제출</h2>
         <div class="mt-4 rounded-2xl border border-amber-400/20 bg-amber-400/[.07] p-4 text-sm text-amber-100">
-          <strong>4학년 1반</strong> 학생용 제출함입니다. 사진은 수업용 비공개 저장소에 안전하게 보관됩니다.
+          <strong id="submitClassLabel">우리 반</strong> 학생용 제출함입니다. 사진은 수업용 비공개 저장소에 안전하게 보관됩니다.
         </div>
 
         <form id="observationForm" class="mt-6 space-y-5" onsubmit="submitObservation(event)">
@@ -275,7 +275,7 @@
   </main>
 
   <footer class="border-t border-space-800 px-4 py-6 text-center text-xs leading-5 text-slate-600">
-    공주 달 관찰 탐험대 · 사진 제출과 우리 반 갤러리는 수업 참여 링크로 입장한 학생만 이용할 수 있습니다.
+    <span id="footerBrand">달 관찰 탐험대</span> · 사진 제출과 우리 반 갤러리는 수업 참여 링크로 입장한 학생만 이용할 수 있습니다.
   </footer>
 
   <div id="lightbox" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/90 p-4 backdrop-blur" onclick="closeLightbox(event)" role="dialog" aria-modal="true" aria-label="사진 크게 보기">
@@ -291,8 +291,8 @@
   <script>
     'use strict';
 
-    const GONGJU_LAT = 36.4465;
-    const GONGJU_LON = 127.1190;
+    const DEFAULT_OBSERVATION_LAT = 36.5;
+    const DEFAULT_OBSERVATION_LON = 127.5;
     const PAGE_SIZE = 12;
     const MAX_SOURCE_BYTES = 20 * 1024 * 1024;
     const MAX_OUTPUT_BYTES = 6 * 1024 * 1024;
@@ -310,6 +310,14 @@
     let galleryRequestController = null;
     let toastTimer = null;
     let cameraStream = null;
+    const DEFAULT_CLASS_LABEL = '우리 반';
+    const DEFAULT_REGION_LABEL = '관찰 지역';
+    const DEFAULT_REGION_SHORT_LABEL = '지역';
+    let currentClassLabel = DEFAULT_CLASS_LABEL;
+    let currentRegionLabel = DEFAULT_REGION_LABEL;
+    let currentRegionShortLabel = DEFAULT_REGION_SHORT_LABEL;
+    let currentObservationLat = DEFAULT_OBSERVATION_LAT;
+    let currentObservationLon = DEFAULT_OBSERVATION_LON;
 
     const MoonEngine = (() => {
       const PI = Math.PI;
@@ -445,15 +453,75 @@
       });
     });
 
+    function formatLatitude(value) {
+      return `${value >= 0 ? '북위' : '남위'} ${Math.abs(value).toFixed(4)}°`;
+    }
+
+    function formatLongitude(value) {
+      return `${value >= 0 ? '동경' : '서경'} ${Math.abs(value).toFixed(4)}°`;
+    }
+
+    function normalizedLabel(value, fallback) {
+      return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+    }
+
+    function normalizedCoordinate(value, fallback, min, max) {
+      const numberValue = Number(value);
+      return Number.isFinite(numberValue) && numberValue >= min && numberValue <= max ? numberValue : fallback;
+    }
+
+    function setClassroomContext(context) {
+      const authenticated = Boolean(context && context.authenticated);
+      const activeClassLabel = authenticated ? normalizedLabel(context.classLabel, '') : '';
+      const regionLabel = authenticated ? normalizedLabel(context.regionLabel, DEFAULT_REGION_LABEL) : DEFAULT_REGION_LABEL;
+      const regionShortLabel = authenticated ? normalizedLabel(context.regionShortLabel, DEFAULT_REGION_SHORT_LABEL) : DEFAULT_REGION_SHORT_LABEL;
+      const observationLat = authenticated ? normalizedCoordinate(context.observationLat, DEFAULT_OBSERVATION_LAT, -90, 90) : DEFAULT_OBSERVATION_LAT;
+      const observationLon = authenticated ? normalizedCoordinate(context.observationLon, DEFAULT_OBSERVATION_LON, -180, 180) : DEFAULT_OBSERVATION_LON;
+      const coordinatesChanged = observationLat !== currentObservationLat || observationLon !== currentObservationLon;
+      currentClassLabel = activeClassLabel || DEFAULT_CLASS_LABEL;
+      currentRegionLabel = regionLabel;
+      currentRegionShortLabel = regionShortLabel;
+      currentObservationLat = observationLat;
+      currentObservationLon = observationLon;
+      const titleText = authenticated ? `${currentRegionShortLabel} 달 관찰 탐험대` : '달 관찰 탐험대';
+      const headerText = authenticated
+        ? `📍 ${currentRegionLabel} 기준 · ${currentClassLabel}`
+        : `📍 ${currentRegionLabel} 기준 · 수업 참여 전`;
+      document.title = titleText;
+      const appTitle = document.getElementById('studentAppTitle');
+      const header = document.getElementById('studentClassHeaderLabel');
+      const submitLabel = document.getElementById('submitClassLabel');
+      const calendarLabel = document.getElementById('moonCalendarLabel');
+      const locationNote = document.getElementById('locationNote');
+      const footerBrand = document.getElementById('footerBrand');
+      if (appTitle) appTitle.textContent = titleText;
+      if (header) header.textContent = headerText;
+      if (submitLabel) submitLabel.textContent = currentClassLabel;
+      if (calendarLabel) calendarLabel.textContent = authenticated ? `${currentRegionShortLabel} 하늘 달력` : '하늘 달력';
+      if (locationNote) {
+        locationNote.textContent = authenticated
+          ? `※ ${currentRegionLabel} 기준 좌표(${formatLatitude(currentObservationLat)}, ${formatLongitude(currentObservationLon)})의 교육용 천문 계산값입니다. 지형과 대기 상태에 따라 실제 관찰 시각은 조금 달라질 수 있습니다.`
+          : '※ 수업 QR로 입장하면 선생님이 설정한 관찰 지역 기준으로 달 정보를 계산합니다. 지형과 대기 상태에 따라 실제 관찰 시각은 조금 달라질 수 있습니다.';
+      }
+      if (footerBrand) footerBrand.textContent = titleText;
+      if (coordinatesChanged) {
+        renderToday();
+        renderCalendar();
+      }
+    }
+
     async function checkSession() {
       const banner = document.getElementById('sessionBanner');
+      let sessionContext = null;
       try {
         const response = await fetch('/api/session', { credentials: 'same-origin' });
         const result = await response.json();
         hasClassSession = Boolean(result.authenticated);
+        sessionContext = hasClassSession ? result : null;
       } catch (_) {
         hasClassSession = false;
       }
+      setClassroomContext(sessionContext);
 
       document.querySelectorAll('[data-view="submit"], [data-view="gallery"]').forEach((button) => {
         button.disabled = !hasClassSession;
@@ -547,7 +615,7 @@
       let maxTime = null;
       for (let minute = 0; minute < 1440; minute += 2) {
         const time = new Date(start.getTime() + minute * 60000);
-        const altitude = MoonEngine.getMoonPosition(time, GONGJU_LAT, GONGJU_LON).altitude;
+        const altitude = MoonEngine.getMoonPosition(time, currentObservationLat, currentObservationLon).altitude;
         if (altitude > maxAltitude) {
           maxAltitude = altitude;
           maxTime = time;
@@ -592,7 +660,7 @@
     function renderToday() {
       const noon = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 12);
       const illumination = MoonEngine.getMoonIllumination(noon);
-      const times = MoonEngine.getMoonTimes(noon, GONGJU_LAT, GONGJU_LON);
+      const times = MoonEngine.getMoonTimes(noon, currentObservationLat, currentObservationLon);
       const transit = getTransit(noon);
       const [name, description] = phaseInfo(illumination.phase);
       const dateLabel = new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }).format(noon);
@@ -622,7 +690,7 @@
       const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 18);
       for (let minutes = 0; minutes <= 300; minutes += 30) {
         const time = new Date(start.getTime() + minutes * 60000);
-        if (MoonEngine.getMoonPosition(time, GONGJU_LAT, GONGJU_LON).altitude > 0) return true;
+        if (MoonEngine.getMoonPosition(time, currentObservationLat, currentObservationLon).altitude > 0) return true;
       }
       return false;
     }
@@ -977,7 +1045,7 @@
         title.textContent = `${item.studentNumber}번 ${item.displayName}`;
         const badge = document.createElement('span');
         badge.className = 'shrink-0 rounded-full bg-amber-400/10 px-2.5 py-1 text-[11px] font-bold text-amber-300';
-        badge.textContent = '4학년 1반';
+        badge.textContent = currentClassLabel;
         heading.append(title, badge);
         const time = document.createElement('p');
         time.className = 'mt-2 text-xs text-slate-500';
