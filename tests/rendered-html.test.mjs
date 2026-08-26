@@ -103,6 +103,17 @@ test("lets the admin choose and regenerate QR codes per class", async () => {
   assert.match(adminPage, /선택한 반 새 QR 만들기/);
 });
 
+test("clarifies admin sign-out and Drive disconnect actions with short help text", async () => {
+  const adminPage = await readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8");
+  assert.match(adminPage, /Google Drive 연결하기/);
+  assert.match(adminPage, /교사 Google 계정을 이 서비스에 연결합니다/);
+  assert.match(adminPage, /이 브라우저의 교사 화면 세션만 종료합니다/);
+  assert.match(adminPage, /같은 계정으로 다시 연결하면 기존 반 목록으로 돌아옵니다/);
+  assert.match(adminPage, /Google Drive 생성\/관리 권한을 해제합니다/);
+  assert.match(adminPage, /업로드된 파일과 반별 폴더·제출 목록은 Google Drive에 그대로 남습니다/);
+  assert.match(adminPage, /현재 관리 중인 반과 다른 반의 QR도 선택해서 볼 수 있습니다/);
+});
+
 test("offers external high-quality capture, in-page camera fallback, and gallery separately", async () => {
   const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
   assert.match(html, /<input[^>]*id="captureInput"[^>]*type="file"[^>]*>/);

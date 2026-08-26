@@ -47,6 +47,26 @@ interface PageResult {
   message?: string;
 }
 
+function HelpTip({ label }: { label: string }) {
+  return (
+    <span className="group relative inline-flex align-middle">
+      <button
+        type="button"
+        aria-label={label}
+        className="grid size-7 place-items-center rounded-full border border-space-600 bg-space-900 text-xs font-black text-slate-400 hover:border-amber-400/50 hover:text-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+      >
+        ?
+      </button>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-space-600 bg-space-900 p-3 text-left text-xs font-medium leading-5 text-slate-200 shadow-card group-hover:block group-focus-within:block"
+      >
+        {label}
+      </span>
+    </span>
+  );
+}
+
 export default function AdminPage() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [invite, setInvite] = useState<InviteInfo | null>(null);
@@ -240,9 +260,16 @@ export default function AdminPage() {
             앱이 새로 만드는 수업 폴더·사진·스프레드시트만 관리합니다. 학생 사진·이름·메모는 중앙 D1이나 R2에 장기 저장하지 않습니다.
           </p>
           {message ? <p className="mt-4 rounded-xl border border-red-400/25 bg-red-400/10 p-3 text-sm text-red-200" role="alert">{message}</p> : null}
-          <a href="/api/google/start" className="mt-6 flex w-full items-center justify-center rounded-xl bg-amber-500 px-5 py-3.5 font-black text-space-950 hover:bg-amber-400">
-            Google Drive 연결하기
-          </a>
+          <div className="mt-6 flex items-center gap-2">
+            <a
+              href="/api/google/start"
+              title="교사 Google 계정을 연결해 반별 Drive 폴더와 학생 QR을 만들 수 있게 합니다."
+              className="flex min-w-0 flex-1 items-center justify-center rounded-xl bg-amber-500 px-5 py-3.5 font-black text-space-950 hover:bg-amber-400"
+            >
+              Google Drive 연결하기
+            </a>
+            <HelpTip label="교사 Google 계정을 이 서비스에 연결합니다. 앱이 새로 만드는 반별 Drive 폴더와 제출 목록만 관리합니다." />
+          </div>
           <Link href="/" className="mt-4 block text-center text-sm font-bold text-slate-400 hover:text-amber-300">학생 화면으로 돌아가기</Link>
           <Link href="/operator" className="mt-3 block text-center text-xs text-slate-600 hover:text-slate-400">서비스 운영 설정</Link>
         </section>
@@ -264,8 +291,26 @@ export default function AdminPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Link href="/" className="rounded-xl border border-space-600 bg-space-800 px-4 py-2 text-sm font-bold">학생 화면</Link>
-            <button onClick={signOut} className="rounded-xl border border-space-600 bg-space-800 px-4 py-2 text-sm font-bold">로그아웃</button>
-            <button onClick={disconnect} className="rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-200">Drive 연결 해제</button>
+            <span className="flex items-center gap-1">
+              <button
+                onClick={signOut}
+                title="이 브라우저의 교사 로그인만 끝냅니다. Drive 연결과 반별 QR은 유지됩니다."
+                className="rounded-xl border border-space-600 bg-space-800 px-4 py-2 text-sm font-bold"
+              >
+                로그아웃
+              </button>
+              <HelpTip label="이 브라우저의 교사 화면 세션만 종료합니다. Google 계정 연결과 반별 Drive/QR은 유지되며, 같은 계정으로 다시 연결하면 기존 반 목록으로 돌아옵니다." />
+            </span>
+            <span className="flex items-center gap-1">
+              <button
+                onClick={disconnect}
+                title="중앙 서비스의 Google 토큰과 모든 반 연결을 해제합니다. Drive 자료는 삭제하지 않습니다."
+                className="rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-200"
+              >
+                Drive 연결 해제
+              </button>
+              <HelpTip label="이 서비스의 Google Drive 생성/관리 권한을 해제합니다. 업로드된 파일과 반별 폴더·제출 목록은 Google Drive에 그대로 남습니다." />
+            </span>
           </div>
         </header>
 
@@ -274,7 +319,10 @@ export default function AdminPage() {
         <section className="grid gap-5 lg:grid-cols-[360px_1fr]">
           <div className="space-y-5">
             <article className="rounded-3xl border border-space-700 bg-space-800 p-5 shadow-card">
-              <h2 className="text-lg font-black">반 선택</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-black">반 선택</h2>
+                <HelpTip label="관리 화면의 기록 조회와 학급 설정 기준을 바꿉니다. 학생에게 보낼 QR 선택은 아래 영역에서 따로 할 수 있습니다." />
+              </div>
               <p className="mt-2 text-xs leading-5 text-slate-400">같은 Google 계정 안에서 반마다 Drive 폴더와 제출 목록을 따로 씁니다.</p>
               <div className="mt-4 space-y-2">
                 {(invite?.classes || []).map((teacherClass) => {
@@ -306,7 +354,10 @@ export default function AdminPage() {
             </article>
 
             <article className="rounded-3xl border border-space-700 bg-space-800 p-5 shadow-card">
-              <h2 className="text-lg font-black">학생용 QR</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-black">학생용 QR</h2>
+                <HelpTip label="학생에게 나눠 줄 반별 입장 링크입니다. 현재 관리 중인 반과 다른 반의 QR도 선택해서 볼 수 있습니다." />
+              </div>
               <p className="mt-2 text-xs leading-5 text-slate-400">반을 고르면 그 반 학생용 QR을 바로 만들거나 다시 만들 수 있습니다.</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 {(invite?.classes || []).map((teacherClass) => {
