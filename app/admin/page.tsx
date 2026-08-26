@@ -17,14 +17,26 @@ interface Observation {
   driveUrl: string;
 }
 
+interface ClassInfo {
+  id: string;
+  classLabel: string;
+  joinUrl: string;
+  rootFolderUrl: string;
+  spreadsheetUrl: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface InviteInfo {
   joinUrl: string;
+  activeClassId: string;
   classLabel: string;
   googleEmail: string;
   googleDisplayName: string;
   rootFolderUrl: string;
   spreadsheetUrl: string;
   sessionDays: number;
+  classes: ClassInfo[];
 }
 
 interface PageResult {
@@ -42,8 +54,12 @@ export default function AdminPage() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(() =>
+    typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("error") || "",
+  );
   const [classLabel, setClassLabel] = useState("우리 반");
+  const [newClassLabel, setNewClassLabel] = useState("");
+  const [qrClassId, setQrClassId] = useState<string | null>(null);
 
   const loadData = useCallback(async (nextCursor: string | null = null, append = false) => {
     setLoading(true);
@@ -66,6 +82,11 @@ export default function AdminPage() {
       setHasMore(records.hasMore);
       setInvite(inviteResult);
       setClassLabel(inviteResult.classLabel);
+      setQrClassId((current) =>
+        current && inviteResult.classes.some((teacherClass) => teacherClass.id === current)
+          ? current
+          : inviteResult.activeClassId,
+      );
       setAuthenticated(true);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "자료를 불러오지 못했습니다.");
@@ -75,9 +96,6 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    const query = new URLSearchParams(window.location.search);
-    const error = query.get("error");
-    if (error) setMessage(error);
     fetch("/api/admin/session", { credentials: "same-origin" })
       .then(async (response) => {
         const result = (await response.json()) as { authenticated?: boolean };
@@ -99,17 +117,69 @@ export default function AdminPage() {
     const result = (await response.json().catch(() => ({}))) as { classLabel?: string; message?: string };
     if (!response.ok) return setMessage(result.message || "학급명을 저장하지 못했습니다.");
     setClassLabel(result.classLabel || classLabel);
-    setInvite((current) => (current ? { ...current, classLabel: result.classLabel || classLabel } : current));
+    setInvite((current) => current ? {
+      ...current,
+      classLabel: result.classLabel || classLabel,
+      classes: current.classes.map((teacherClass) => teacherClass.id === current.activeClassId
+        ? { ...teacherClass, classLabel: result.classLabel || classLabel }
+        : teacherClass),
+    } : current);
     setMessage("학급명을 저장했습니다.");
   }
 
   async function rotateInvite() {
-    if (!window.confirm("기존 학생 QR을 즉시 사용할 수 없게 하고 새 QR을 만들까요?")) return;
-    const response = await fetch("/api/admin/invite", { method: "POST", credentials: "same-origin" });
+    const selectedClass = invite?.classes.find((teacherClass) => teacherClass.id === qrClassId)
+      || invite?.classes.find((teacherClass) => teacherClass.id === invite.activeClassId);
+    if (!selectedClass) return setMessage("QR을 만들 반을 먼저 선택해 주세요.");
+    if (!window.confirm(`${selectedClass.classLabel}의 기존 학생 QR을 즉시 사용할 수 없게 하고 새 QR을 만들까요?`)) return;
+    const response = await fetch("/api/admin/invite", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ classId: selectedClass.id }),
+    });
     const result = (await response.json().catch(() => ({}))) as InviteInfo & { message?: string };
     if (!response.ok) return setMessage(result.message || "새 수업 링크를 만들지 못했습니다.");
     setInvite(result);
-    setMessage("새 학생 QR을 만들었습니다.");
+    setQrClassId(selectedClass.id);
+    setMessage(`${selectedClass.classLabel}의 새 학생 QR을 만들었습니다.`);
+  }
+
+  async function switchClass(classId: string) {
+    if (classId === invite?.activeClassId) return;
+    const response = await fetch("/api/admin/classes", {
+      method: "PATCH",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ classId }),
+    });
+    const result = (await response.json().catch(() => ({}))) as { message?: string };
+    if (!response.ok) return setMessage(result.message || "반을 전환하지 못했습니다.");
+    setItems([]);
+    setCursor(null);
+    setHasMore(false);
+    await loadData();
+    setQrClassId(classId);
+    setMessage("반을 전환했습니다.");
+  }
+
+  async function createClass(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const response = await fetch("/api/admin/classes", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ classLabel: newClassLabel }),
+    });
+    const result = (await response.json().catch(() => ({}))) as { activeClassId?: string; message?: string };
+    if (!response.ok) return setMessage(result.message || "새 반을 만들지 못했습니다.");
+    setNewClassLabel("");
+    setItems([]);
+    setCursor(null);
+    setHasMore(false);
+    await loadData();
+    setQrClassId(result.activeClassId || null);
+    setMessage("새 반을 만들었습니다.");
   }
 
   async function updateStatus(item: Observation) {
@@ -141,16 +211,18 @@ export default function AdminPage() {
     setAuthenticated(false);
     setItems([]);
     setInvite(null);
+    setQrClassId(null);
   }
 
   async function disconnect() {
-    if (!window.confirm("중앙 서비스와 Google Drive 연결을 해제할까요? Drive의 사진과 제출 목록은 삭제되지 않습니다.")) return;
+    if (!window.confirm("이 Google 계정의 모든 반 연결을 중앙 서비스에서 해제할까요? Drive의 각 반 사진과 제출 목록은 삭제되지 않습니다.")) return;
     const response = await fetch("/api/google/disconnect", { method: "DELETE", credentials: "same-origin" });
     const result = (await response.json().catch(() => ({}))) as { message?: string };
     if (!response.ok) return setMessage(result.message || "연결을 해제하지 못했습니다.");
     setAuthenticated(false);
     setInvite(null);
     setItems([]);
+    setQrClassId(null);
     setMessage(result.message || "연결을 해제했습니다.");
   }
 
@@ -178,6 +250,9 @@ export default function AdminPage() {
     );
   }
 
+  const selectedQrClass = invite?.classes.find((teacherClass) => teacherClass.id === qrClassId)
+    || invite?.classes.find((teacherClass) => teacherClass.id === invite.activeClassId);
+
   return (
     <main className="min-h-screen bg-space-950 px-4 py-7 text-slate-100 sm:px-6">
       <div className="mx-auto max-w-6xl space-y-6">
@@ -197,16 +272,66 @@ export default function AdminPage() {
         {message ? <p className="rounded-xl border border-blue-400/25 bg-blue-400/10 p-3 text-sm text-blue-100" role="status">{message}</p> : null}
 
         <section className="grid gap-5 lg:grid-cols-[360px_1fr]">
-          <article className="rounded-3xl border border-space-700 bg-space-800 p-5 shadow-card">
-            <h2 className="text-lg font-black">학생용 QR</h2>
-            <p className="mt-2 text-xs leading-5 text-slate-400">한 번 입장한 기기는 {invite?.sessionDays || 60}일 동안 제출할 수 있습니다.</p>
-            {invite?.joinUrl ? (
-              <div className="mt-5 rounded-2xl bg-white p-4 text-center">
-                <QRCodeSVG value={invite.joinUrl} size={260} className="mx-auto h-auto max-w-full" />
+          <div className="space-y-5">
+            <article className="rounded-3xl border border-space-700 bg-space-800 p-5 shadow-card">
+              <h2 className="text-lg font-black">반 선택</h2>
+              <p className="mt-2 text-xs leading-5 text-slate-400">같은 Google 계정 안에서 반마다 Drive 폴더와 제출 목록을 따로 씁니다.</p>
+              <div className="mt-4 space-y-2">
+                {(invite?.classes || []).map((teacherClass) => {
+                  const active = teacherClass.id === invite?.activeClassId;
+                  return (
+                    <button
+                      key={teacherClass.id}
+                      type="button"
+                      onClick={() => void switchClass(teacherClass.id)}
+                      className={`flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left text-sm font-bold ${active ? "border-amber-400/50 bg-amber-400/10 text-amber-100" : "border-space-600 bg-space-900 text-slate-200 hover:border-amber-400/50"}`}
+                    >
+                      <span className="min-w-0 truncate">{teacherClass.classLabel}</span>
+                      <span className="shrink-0 text-xs text-slate-400">{active ? "현재 반" : "전환"}</span>
+                    </button>
+                  );
+                })}
               </div>
-            ) : null}
-            <button onClick={rotateInvite} className="mt-4 w-full rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-sm font-black text-amber-200">새 QR 만들기</button>
-          </article>
+              <form onSubmit={createClass} className="mt-4 flex gap-2">
+                <input
+                  value={newClassLabel}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => setNewClassLabel(event.target.value)}
+                  maxLength={40}
+                  placeholder="새 반 이름"
+                  className="min-w-0 flex-1 rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-sm"
+                  aria-label="새 반 이름"
+                />
+                <button disabled={!newClassLabel.trim() || loading} className="rounded-xl bg-amber-500 px-4 py-3 text-sm font-black text-space-950 disabled:opacity-50">새 반 만들기</button>
+              </form>
+            </article>
+
+            <article className="rounded-3xl border border-space-700 bg-space-800 p-5 shadow-card">
+              <h2 className="text-lg font-black">학생용 QR</h2>
+              <p className="mt-2 text-xs leading-5 text-slate-400">반을 고르면 그 반 학생용 QR을 바로 만들거나 다시 만들 수 있습니다.</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {(invite?.classes || []).map((teacherClass) => {
+                  const selected = teacherClass.id === selectedQrClass?.id;
+                  return (
+                    <button
+                      key={teacherClass.id}
+                      type="button"
+                      onClick={() => setQrClassId(teacherClass.id)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-bold ${selected ? "border-amber-400/60 bg-amber-400/15 text-amber-100" : "border-space-600 bg-space-900 text-slate-300 hover:border-amber-400/50"}`}
+                    >
+                      {teacherClass.classLabel}
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedQrClass?.joinUrl ? (
+                <div className="mt-5 rounded-2xl bg-white p-4 text-center">
+                  <QRCodeSVG value={selectedQrClass.joinUrl} size={260} className="mx-auto h-auto max-w-full" />
+                </div>
+              ) : null}
+              <p className="mt-3 text-center text-xs font-bold text-slate-400">{selectedQrClass?.classLabel || "반"} · {invite?.sessionDays || 60}일 유지</p>
+              <button onClick={rotateInvite} className="mt-4 w-full rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-sm font-black text-amber-200">선택한 반 새 QR 만들기</button>
+            </article>
+          </div>
 
           <article className="rounded-3xl border border-space-700 bg-space-800 p-5 shadow-card">
             <h2 className="text-lg font-black">저장 위치와 학급 설정</h2>

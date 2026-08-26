@@ -15,6 +15,8 @@ export async function GET(request: Request) {
     return json({
       authenticated: true,
       teacher: {
+        id: teacher.id,
+        accountId: teacher.accountId,
         displayName: teacher.googleDisplayName,
         email: teacher.googleEmail,
         classLabel: teacher.classLabel,

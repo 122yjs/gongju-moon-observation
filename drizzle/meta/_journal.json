@@ -15,6 +15,13 @@
       "when": 1787588439836,
       "tag": "0001_drive_oauth",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787715677000,
+      "tag": "0002_teacher_accounts_classes",
+      "breakpoints": true
     }
   ]
 }

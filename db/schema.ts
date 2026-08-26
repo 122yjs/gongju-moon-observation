@@ -37,10 +37,29 @@ export const oauthConfig = sqliteTable("oauth_config", {
   updatedAt: text("updated_at").notNull(),
 });
 
+export const teacherAccounts = sqliteTable(
+  "teacher_accounts",
+  {
+    id: text("id").primaryKey(),
+    googlePermissionId: text("google_permission_id").notNull(),
+    googleEmail: text("google_email").notNull(),
+    googleDisplayName: text("google_display_name").notNull(),
+    refreshTokenCiphertext: text("refresh_token_ciphertext").notNull(),
+    accessTokenCiphertext: text("access_token_ciphertext"),
+    accessTokenExpiresAt: text("access_token_expires_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("teacher_accounts_google_permission_unique").on(table.googlePermissionId),
+  ],
+);
+
 export const teacherConnections = sqliteTable(
   "teacher_connections",
   {
     id: text("id").primaryKey(),
+    accountId: text("account_id").notNull(),
     googlePermissionId: text("google_permission_id").notNull(),
     googleEmail: text("google_email").notNull(),
     googleDisplayName: text("google_display_name").notNull(),
@@ -59,7 +78,7 @@ export const teacherConnections = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    uniqueIndex("teacher_connections_google_permission_unique").on(table.googlePermissionId),
+    index("teacher_connections_account_idx").on(table.accountId),
     uniqueIndex("teacher_connections_invite_hash_unique").on(table.inviteTokenHash),
   ],
 );

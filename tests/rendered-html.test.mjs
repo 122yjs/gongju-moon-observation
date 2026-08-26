@@ -64,11 +64,43 @@ test("stores new student submissions only in teacher Drive and Sheets", async ()
 });
 
 test("keeps student PII out of long-lived central D1 tables", async () => {
-  const migration = await readFile(new URL("../drizzle/0001_drive_oauth.sql", import.meta.url), "utf8");
+  const migration = [
+    await readFile(new URL("../drizzle/0001_drive_oauth.sql", import.meta.url), "utf8"),
+    await readFile(new URL("../drizzle/0002_teacher_accounts_classes.sql", import.meta.url), "utf8"),
+  ].join("\n");
   assert.match(migration, /CREATE TABLE `teacher_connections`/);
+  assert.match(migration, /CREATE TABLE `teacher_accounts`/);
   assert.match(migration, /CREATE TABLE `submission_receipts`/);
   assert.match(migration, /CREATE TABLE `image_tickets`/);
   assert.doesNotMatch(migration, /student_name|student_number|observed_at|\bmemo\b|image_bytes/);
+});
+
+test("preserves existing class folders while splitting Google accounts from classes", async () => {
+  const migration = await readFile(new URL("../drizzle/0002_teacher_accounts_classes.sql", import.meta.url), "utf8");
+  const tenant = await readFile(new URL("../lib/tenant.ts", import.meta.url), "utf8");
+  const callback = await readFile(new URL("../app/api/google/callback/route.ts", import.meta.url), "utf8");
+  const classesRoute = await readFile(new URL("../app/api/admin/classes/route.ts", import.meta.url), "utf8");
+  assert.match(migration, /INSERT INTO `teacher_accounts`[\s\S]*FROM `teacher_connections`/);
+  assert.match(migration, /UPDATE `teacher_connections` SET `account_id` = `id`/);
+  assert.match(migration, /DROP INDEX `teacher_connections_google_permission_unique`/);
+  assert.match(tenant, /function getTeacherAccountByGooglePermissionId/);
+  assert.match(tenant, /function listTeacherClasses/);
+  assert.match(tenant, /function createTeacherClass/);
+  assert.match(callback, /getTeacherAccountByGooglePermissionId/);
+  assert.match(callback, /getFirstTeacherByAccountId/);
+  assert.match(classesRoute, /createClassRootFolder/);
+  assert.match(classesRoute, /createTeacherCookie\(created\.id\)/);
+});
+
+test("lets the admin choose and regenerate QR codes per class", async () => {
+  const inviteRoute = await readFile(new URL("../app/api/admin/invite/route.ts", import.meta.url), "utf8");
+  const adminPage = await readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8");
+  assert.match(inviteRoute, /classes: visibleClasses/);
+  assert.match(inviteRoute, /joinUrl: `\$\{origin\}\/join\?t=/);
+  assert.match(inviteRoute, /rotateInviteToken\(target\.id/);
+  assert.match(adminPage, /const \[qrClassId, setQrClassId\]/);
+  assert.match(adminPage, /학생용 QR/);
+  assert.match(adminPage, /선택한 반 새 QR 만들기/);
 });
 
 test("offers external high-quality capture, in-page camera fallback, and gallery separately", async () => {

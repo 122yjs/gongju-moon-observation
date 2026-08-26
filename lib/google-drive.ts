@@ -207,7 +207,7 @@ export async function getTeacherAccessToken(teacher: TeacherConnection) {
     refresh_token: refreshToken,
   });
   const expiresAt = new Date(Date.now() + Math.max(60, tokens.expires_in || 3600) * 1000).toISOString();
-  await updateTeacherAccessToken(teacher.id, tokens.access_token, expiresAt);
+  await updateTeacherAccessToken(teacher.accountId, tokens.access_token, expiresAt);
   return tokens.access_token;
 }
 
@@ -228,6 +228,16 @@ export async function createIdentityFolder(accessToken: string) {
     mimeType: FOLDER_MIME,
   });
   if (!file.id) throw new HttpError(502, "Google Drive에 수업 폴더를 만들지 못했습니다.");
+  return file.id;
+}
+
+export async function createClassRootFolder(accessToken: string, classLabel: string) {
+  const safeLabel = classLabel.normalize("NFC").trim() || "새 반";
+  const file = await createDriveFile(accessToken, {
+    name: `달 관찰 탐험대 - ${safeLabel}`,
+    mimeType: FOLDER_MIME,
+  });
+  if (!file.id) throw new HttpError(502, "Google Drive에 반 폴더를 만들지 못했습니다.");
   return file.id;
 }
 

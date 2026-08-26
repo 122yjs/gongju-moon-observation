@@ -16,7 +16,8 @@
     {
       "binding": "DB",
       "database_name": "gongju-moon-observation",
-      "database_id": "5659019c-efc7-4eb0-93ad-45d19f069a6e"
+      "database_id": "5659019c-efc7-4eb0-93ad-45d19f069a6e",
+      "migrations_dir": "drizzle"
     }
   ]
 }

@@ -8,8 +8,21 @@ export interface OAuthConfig {
   updatedAt: string;
 }
 
+export interface TeacherAccount {
+  id: string;
+  googlePermissionId: string;
+  googleEmail: string;
+  googleDisplayName: string;
+  refreshTokenCiphertext: string;
+  accessTokenCiphertext: string | null;
+  accessTokenExpiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TeacherConnection {
   id: string;
+  accountId: string;
   googlePermissionId: string;
   googleEmail: string;
   googleDisplayName: string;
@@ -28,14 +41,36 @@ export interface TeacherConnection {
   updatedAt: string;
 }
 
+export interface TeacherClassSummary {
+  id: string;
+  classLabel: string;
+  rootFolderId: string;
+  spreadsheetId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface OAuthConfigRow {
   client_id: string;
   client_secret_ciphertext: string;
   updated_at: string;
 }
 
+interface TeacherAccountRow {
+  id: string;
+  google_permission_id: string;
+  google_email: string;
+  google_display_name: string;
+  refresh_token_ciphertext: string;
+  access_token_ciphertext: string | null;
+  access_token_expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface TeacherRow {
   id: string;
+  account_id: string;
   google_permission_id: string;
   google_email: string;
   google_display_name: string;
@@ -52,9 +87,25 @@ interface TeacherRow {
   class_label: string;
   created_at: string;
   updated_at: string;
+  account_row_id: string | null;
+  account_google_permission_id: string | null;
+  account_google_email: string | null;
+  account_google_display_name: string | null;
+  account_refresh_token_ciphertext: string | null;
+  account_access_token_ciphertext: string | null;
+  account_access_token_expires_at: string | null;
 }
 
-function mapTeacher(row: TeacherRow): TeacherConnection {
+interface TeacherClassRow {
+  id: string;
+  class_label: string;
+  root_folder_id: string;
+  spreadsheet_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function mapAccount(row: TeacherAccountRow): TeacherAccount {
   return {
     id: row.id,
     googlePermissionId: row.google_permission_id,
@@ -63,6 +114,22 @@ function mapTeacher(row: TeacherRow): TeacherConnection {
     refreshTokenCiphertext: row.refresh_token_ciphertext,
     accessTokenCiphertext: row.access_token_ciphertext,
     accessTokenExpiresAt: row.access_token_expires_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapTeacher(row: TeacherRow): TeacherConnection {
+  const accountId = row.account_row_id || row.account_id || row.id;
+  return {
+    id: row.id,
+    accountId,
+    googlePermissionId: row.account_google_permission_id || row.google_permission_id,
+    googleEmail: row.account_google_email || row.google_email,
+    googleDisplayName: row.account_google_display_name || row.google_display_name,
+    refreshTokenCiphertext: row.account_refresh_token_ciphertext || row.refresh_token_ciphertext,
+    accessTokenCiphertext: row.account_access_token_ciphertext ?? row.access_token_ciphertext,
+    accessTokenExpiresAt: row.account_access_token_expires_at ?? row.access_token_expires_at,
     rootFolderId: row.root_folder_id,
     photosFolderId: row.photos_folder_id,
     spreadsheetId: row.spreadsheet_id,
@@ -71,6 +138,17 @@ function mapTeacher(row: TeacherRow): TeacherConnection {
     inviteTokenHash: row.invite_token_hash,
     inviteTokenCiphertext: row.invite_token_ciphertext,
     classLabel: row.class_label,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapClass(row: TeacherClassRow): TeacherClassSummary {
+  return {
+    id: row.id,
+    classLabel: row.class_label,
+    rootFolderId: row.root_folder_id,
+    spreadsheetId: row.spreadsheet_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -119,32 +197,144 @@ export async function saveOAuthConfig(clientId: string, clientSecret: string) {
     .run();
 }
 
+async function findAccount(where: string, value: string) {
+  const row = await getEnv().DB.prepare(
+    `SELECT *
+       FROM teacher_accounts
+      WHERE ${where} = ?
+      LIMIT 1`,
+  )
+    .bind(value)
+    .first<TeacherAccountRow>();
+  return row ? mapAccount(row) : null;
+}
+
 async function findTeacher(where: string, value: string) {
   const row = await getEnv().DB.prepare(
-    `SELECT * FROM teacher_connections WHERE ${where} = ? LIMIT 1`,
+    `SELECT
+       tc.*,
+       ta.id AS account_row_id,
+       ta.google_permission_id AS account_google_permission_id,
+       ta.google_email AS account_google_email,
+       ta.google_display_name AS account_google_display_name,
+       ta.refresh_token_ciphertext AS account_refresh_token_ciphertext,
+       ta.access_token_ciphertext AS account_access_token_ciphertext,
+       ta.access_token_expires_at AS account_access_token_expires_at
+     FROM teacher_connections tc
+     LEFT JOIN teacher_accounts ta
+       ON ta.id = CASE WHEN tc.account_id = '' THEN tc.id ELSE tc.account_id END
+     WHERE ${where} = ?
+     LIMIT 1`,
   )
     .bind(value)
     .first<TeacherRow>();
   return row ? mapTeacher(row) : null;
 }
 
-export function getTeacherById(id: string) {
-  return findTeacher("id", id);
+export function getTeacherAccountById(id: string) {
+  return findAccount("id", id);
 }
 
-export function getTeacherByGooglePermissionId(permissionId: string) {
-  return findTeacher("google_permission_id", permissionId);
+export function getTeacherAccountByGooglePermissionId(permissionId: string) {
+  return findAccount("google_permission_id", permissionId);
+}
+
+export function getTeacherById(id: string) {
+  return findTeacher("tc.id", id);
 }
 
 export function getTeacherByInviteHash(hash: string) {
-  return findTeacher("invite_token_hash", hash);
+  return findTeacher("tc.invite_token_hash", hash);
 }
 
-export async function createTeacherConnection(input: {
+export async function getFirstTeacherByAccountId(accountId: string) {
+  const row = await getEnv().DB.prepare(
+    `SELECT id
+       FROM teacher_connections
+      WHERE account_id = ?
+      ORDER BY created_at ASC, id ASC
+      LIMIT 1`,
+  )
+    .bind(accountId)
+    .first<{ id: string }>();
+  return row ? getTeacherById(row.id) : null;
+}
+
+export async function listTeacherClasses(accountId: string) {
+  const rows = await getEnv().DB.prepare(
+    `SELECT id, class_label, root_folder_id, spreadsheet_id, created_at, updated_at
+       FROM teacher_connections
+      WHERE account_id = ?
+      ORDER BY created_at ASC, id ASC`,
+  )
+    .bind(accountId)
+    .all<TeacherClassRow>();
+  return (rows.results || []).map(mapClass);
+}
+
+export async function createTeacherAccount(input: {
   googlePermissionId: string;
   googleEmail: string;
   googleDisplayName: string;
   refreshToken: string;
+}) {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const refreshTokenCiphertext = await encryptString(input.refreshToken, `google-refresh-token:${id}`);
+  await getEnv().DB.prepare(
+    `INSERT INTO teacher_accounts (
+       id, google_permission_id, google_email, google_display_name,
+       refresh_token_ciphertext, access_token_ciphertext, access_token_expires_at,
+       created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?)`,
+  )
+    .bind(
+      id,
+      input.googlePermissionId,
+      input.googleEmail,
+      input.googleDisplayName,
+      refreshTokenCiphertext,
+      now,
+      now,
+    )
+    .run();
+  const account = await getTeacherAccountById(id);
+  if (!account) throw new Error("교사 계정 연결 정보를 생성하지 못했습니다.");
+  return account;
+}
+
+export async function reconnectTeacherAccount(
+  account: TeacherAccount,
+  input: {
+    googleEmail: string;
+    googleDisplayName: string;
+    refreshToken: string;
+  },
+) {
+  const now = new Date().toISOString();
+  const refreshTokenCiphertext = await encryptString(
+    input.refreshToken,
+    `google-refresh-token:${account.id}`,
+  );
+  await getEnv().DB.prepare(
+    `UPDATE teacher_accounts SET
+       google_email = ?,
+       google_display_name = ?,
+       refresh_token_ciphertext = ?,
+       access_token_ciphertext = NULL,
+       access_token_expires_at = NULL,
+       updated_at = ?
+     WHERE id = ?`,
+  )
+    .bind(input.googleEmail, input.googleDisplayName, refreshTokenCiphertext, now, account.id)
+    .run();
+  const updated = await getTeacherAccountById(account.id);
+  if (!updated) throw new Error("교사 계정 연결 정보를 갱신하지 못했습니다.");
+  return updated;
+}
+
+export async function createTeacherClass(input: {
+  account: TeacherAccount;
   rootFolderId: string;
   photosFolderId: string;
   spreadsheetId: string;
@@ -156,22 +346,23 @@ export async function createTeacherConnection(input: {
 }) {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  const refreshTokenCiphertext = await encryptString(input.refreshToken, `google-refresh-token:${id}`);
+  const legacyTokenCiphertext = await encryptString("stored-on-teacher-account", `google-refresh-token:${id}`);
   const inviteTokenCiphertext = await encryptString(input.inviteToken, `class-invite-token:${id}`);
   await getEnv().DB.prepare(
     `INSERT INTO teacher_connections (
-       id, google_permission_id, google_email, google_display_name,
+       id, account_id, google_permission_id, google_email, google_display_name,
        refresh_token_ciphertext, access_token_ciphertext, access_token_expires_at,
        root_folder_id, photos_folder_id, spreadsheet_id, sheet_id, sheet_title,
        invite_token_hash, invite_token_ciphertext, class_label, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       id,
-      input.googlePermissionId,
-      input.googleEmail,
-      input.googleDisplayName,
-      refreshTokenCiphertext,
+      input.account.id,
+      input.account.googlePermissionId,
+      input.account.googleEmail,
+      input.account.googleDisplayName,
+      legacyTokenCiphertext,
       input.rootFolderId,
       input.photosFolderId,
       input.spreadsheetId,
@@ -185,66 +376,22 @@ export async function createTeacherConnection(input: {
     )
     .run();
   const teacher = await getTeacherById(id);
-  if (!teacher) throw new Error("교사 연결 정보를 생성하지 못했습니다.");
+  if (!teacher) throw new Error("반 연결 정보를 생성하지 못했습니다.");
   return teacher;
 }
 
-export async function reconnectTeacher(
-  teacher: TeacherConnection,
-  input: {
-    googleEmail: string;
-    googleDisplayName: string;
-    refreshToken: string;
-    rootFolderId?: string;
-    photosFolderId?: string;
-    spreadsheetId?: string;
-    sheetId?: number;
-    sheetTitle?: string;
-  },
-) {
-  const now = new Date().toISOString();
-  const refreshTokenCiphertext = await encryptString(
-    input.refreshToken,
-    `google-refresh-token:${teacher.id}`,
-  );
-  await getEnv().DB.prepare(
-    `UPDATE teacher_connections SET
-       google_email = ?, google_display_name = ?, refresh_token_ciphertext = ?,
-       access_token_ciphertext = NULL, access_token_expires_at = NULL,
-       root_folder_id = ?, photos_folder_id = ?, spreadsheet_id = ?, sheet_id = ?, sheet_title = ?,
-       updated_at = ?
-     WHERE id = ?`,
-  )
-    .bind(
-      input.googleEmail,
-      input.googleDisplayName,
-      refreshTokenCiphertext,
-      input.rootFolderId || teacher.rootFolderId,
-      input.photosFolderId || teacher.photosFolderId,
-      input.spreadsheetId || teacher.spreadsheetId,
-      input.sheetId ?? teacher.sheetId,
-      input.sheetTitle || teacher.sheetTitle,
-      now,
-      teacher.id,
-    )
-    .run();
-  const updated = await getTeacherById(teacher.id);
-  if (!updated) throw new Error("교사 연결 정보를 갱신하지 못했습니다.");
-  return updated;
-}
-
 export async function updateTeacherAccessToken(
-  teacherId: string,
+  accountId: string,
   accessToken: string,
   expiresAt: string,
 ) {
-  const encrypted = await encryptString(accessToken, `google-access-token:${teacherId}`);
+  const encrypted = await encryptString(accessToken, `google-access-token:${accountId}`);
   await getEnv().DB.prepare(
-    `UPDATE teacher_connections
+    `UPDATE teacher_accounts
         SET access_token_ciphertext = ?, access_token_expires_at = ?, updated_at = ?
       WHERE id = ?`,
   )
-    .bind(encrypted, expiresAt, new Date().toISOString(), teacherId)
+    .bind(encrypted, expiresAt, new Date().toISOString(), accountId)
     .run();
 }
 
@@ -280,23 +427,30 @@ export async function revealInviteToken(teacher: TeacherConnection) {
   return decryptString(teacher.inviteTokenCiphertext, `class-invite-token:${teacher.id}`);
 }
 
-export async function revealRefreshToken(teacher: TeacherConnection) {
-  return decryptString(teacher.refreshTokenCiphertext, `google-refresh-token:${teacher.id}`);
+export async function revealRefreshToken(source: TeacherConnection | TeacherAccount) {
+  const accountId = "accountId" in source ? source.accountId : source.id;
+  return decryptString(source.refreshTokenCiphertext, `google-refresh-token:${accountId}`);
 }
 
-export async function revealAccessToken(teacher: TeacherConnection) {
-  if (!teacher.accessTokenCiphertext) return null;
-  return decryptString(teacher.accessTokenCiphertext, `google-access-token:${teacher.id}`);
+export async function revealAccessToken(source: TeacherConnection | TeacherAccount) {
+  if (!source.accessTokenCiphertext) return null;
+  const accountId = "accountId" in source ? source.accountId : source.id;
+  return decryptString(source.accessTokenCiphertext, `google-access-token:${accountId}`);
 }
 
-export async function deleteTeacherConnection(teacherId: string) {
+export async function deleteTeacherAccount(accountId: string) {
+  const classes = await listTeacherClasses(accountId);
   const db = getEnv().DB;
-  await db.batch([
-    db.prepare("DELETE FROM image_tickets WHERE teacher_id = ?").bind(teacherId),
-    db.prepare("DELETE FROM submission_events WHERE teacher_id = ?").bind(teacherId),
-    db.prepare("DELETE FROM submission_receipts WHERE teacher_id = ?").bind(teacherId),
-    db.prepare("DELETE FROM teacher_connections WHERE id = ?").bind(teacherId),
+  const statements = classes.flatMap((teacherClass) => [
+    db.prepare("DELETE FROM image_tickets WHERE teacher_id = ?").bind(teacherClass.id),
+    db.prepare("DELETE FROM submission_events WHERE teacher_id = ?").bind(teacherClass.id),
+    db.prepare("DELETE FROM submission_receipts WHERE teacher_id = ?").bind(teacherClass.id),
   ]);
+  statements.push(
+    db.prepare("DELETE FROM teacher_connections WHERE account_id = ?").bind(accountId),
+    db.prepare("DELETE FROM teacher_accounts WHERE id = ?").bind(accountId),
+  );
+  await db.batch(statements);
 }
 
 export interface SubmissionReceipt {

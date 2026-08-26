@@ -11,12 +11,13 @@ import {
   exchangeAuthorizationCode,
   getFolderOwner,
   initializeTeacherDrive,
-  verifyTeacherDrive,
 } from "../../../../lib/google-drive";
 import {
-  createTeacherConnection,
-  getTeacherByGooglePermissionId,
-  reconnectTeacher,
+  createTeacherAccount,
+  createTeacherClass,
+  getFirstTeacherByAccountId,
+  getTeacherAccountByGooglePermissionId,
+  reconnectTeacherAccount,
   revealRefreshToken,
   updateTeacherAccessToken,
 } from "../../../../lib/tenant";
@@ -47,27 +48,29 @@ export async function GET(request: Request) {
     accessToken = tokens.access_token;
     candidateRootId = await createIdentityFolder(accessToken);
     const identity = await getFolderOwner(accessToken, candidateRootId);
-    const existing = await getTeacherByGooglePermissionId(identity.permissionId);
+    const existingAccount = await getTeacherAccountByGooglePermissionId(identity.permissionId);
     let teacher;
 
-    if (existing) {
-      const refreshToken = tokens.refresh_token || (await revealRefreshToken(existing));
-      const existingDriveAvailable = await verifyTeacherDrive(accessToken, existing).catch(() => false);
-      if (existingDriveAvailable) {
+    if (existingAccount) {
+      const refreshToken = tokens.refresh_token || (await revealRefreshToken(existingAccount));
+      const account = await reconnectTeacherAccount(existingAccount, {
+        googleEmail: identity.email,
+        googleDisplayName: identity.displayName,
+        refreshToken,
+      });
+      teacher = await getFirstTeacherByAccountId(account.id);
+      if (teacher) {
         await deleteDriveFile(accessToken, candidateRootId).catch(() => undefined);
         candidateRootId = null;
-        teacher = await reconnectTeacher(existing, {
-          googleEmail: identity.email,
-          googleDisplayName: identity.displayName,
-          refreshToken,
-        });
       } else {
         const resources = await initializeTeacherDrive(accessToken, candidateRootId);
-        teacher = await reconnectTeacher(existing, {
-          googleEmail: identity.email,
-          googleDisplayName: identity.displayName,
-          refreshToken,
+        const inviteToken = randomToken(32);
+        teacher = await createTeacherClass({
+          account,
           ...resources,
+          inviteToken,
+          inviteTokenHash: await sha256Hex(inviteToken),
+          classLabel: "우리 반",
         });
         candidateRootId = null;
       }
@@ -75,13 +78,16 @@ export async function GET(request: Request) {
       if (!tokens.refresh_token) {
         throw new Error("장기 연결 토큰을 받지 못했습니다. Google 연결을 다시 승인해 주세요.");
       }
-      const resources = await initializeTeacherDrive(accessToken, candidateRootId);
-      const inviteToken = randomToken(32);
-      teacher = await createTeacherConnection({
+      const account = await createTeacherAccount({
         googlePermissionId: identity.permissionId,
         googleEmail: identity.email,
         googleDisplayName: identity.displayName,
         refreshToken: tokens.refresh_token,
+      });
+      const resources = await initializeTeacherDrive(accessToken, candidateRootId);
+      const inviteToken = randomToken(32);
+      teacher = await createTeacherClass({
+        account,
         ...resources,
         inviteToken,
         inviteTokenHash: await sha256Hex(inviteToken),
@@ -91,7 +97,7 @@ export async function GET(request: Request) {
     }
 
     const expiresAt = new Date(Date.now() + Math.max(60, tokens.expires_in || 3600) * 1000).toISOString();
-    await updateTeacherAccessToken(teacher.id, accessToken, expiresAt);
+    await updateTeacherAccessToken(teacher.accountId, accessToken, expiresAt);
     return redirectResponse(request, "/admin?connected=1", [
       clearOAuthStateCookie(),
       await createTeacherCookie(teacher.id),
