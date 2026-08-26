@@ -45,6 +45,62 @@ test("builds the moon observation app without external runtime CSS", async () =>
   assert.doesNotMatch(html, /cdn\.tailwindcss\.com|fonts\.googleapis\.com|google\.script\.run/);
 });
 
+test("labels the class gallery and filters it by observation date and attendance number", async () => {
+  const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
+  const route = await readFile(new URL("../app/api/observations/route.ts", import.meta.url), "utf8");
+  const drive = await readFile(new URL("../lib/google-drive.ts", import.meta.url), "utf8");
+  assert.match(html, /data-view="gallery"[^>]*>우리반 달사진 보기<\/button>/);
+  assert.match(html, /id="galleryHeading"[^>]*>우리반 달사진 보기/);
+  assert.match(html, /id="galleryObservedDateFilter"[^>]*type="date"/);
+  assert.match(html, /id="galleryStudentNumberFilter"[^>]*type="number"[^>]*min="1"[^>]*max="50"/);
+  assert.match(route, /url\.searchParams\.get\("observedDate"\)/);
+  assert.match(route, /url\.searchParams\.get\("studentNumber"\)/);
+  assert.match(drive, /row\.observedAt\.startsWith\(`\$\{options\.observedDate\}T`\)/);
+  assert.match(drive, /row\.studentNumber === options\.studentNumber/);
+});
+
+test("sends the selected gallery filters with the first page request", async () => {
+  const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
+  const script = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
+  assert.ok(script, "student page script should exist");
+
+  const elements = new Map();
+  const getElement = (id) => {
+    if (!elements.has(id)) elements.set(id, createElement());
+    return elements.get(id);
+  };
+  getElement("galleryObservedDateFilter").value = "2026-08-25";
+  getElement("galleryStudentNumberFilter").value = "7";
+  getElement("photoGallery").replaceChildren = () => {};
+  const requests = [];
+  const context = {
+    AbortController,
+    URLSearchParams,
+    document: {
+      addEventListener() {},
+      getElementById: getElement,
+    },
+    fetch: async (url) => {
+      requests.push(url);
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return { items: [], total: 0, hasMore: false, nextCursor: null };
+        },
+      };
+    },
+  };
+
+  runInNewContext(
+    `${script}\nglobalThis.__galleryFilters = { applyGalleryFilters };`,
+    context,
+  );
+  await context.__galleryFilters.applyGalleryFilters({ preventDefault() {} });
+
+  assert.deepEqual(requests, ["/api/observations?limit=12&observedDate=2026-08-25&studentNumber=7"]);
+});
+
 test("requests only the non-sensitive drive.file OAuth scope", async () => {
   const google = await readFile(new URL("../lib/google-drive.ts", import.meta.url), "utf8");
   assert.match(google, /DRIVE_FILE_SCOPE = "https:\/\/www\.googleapis\.com\/auth\/drive\.file"/);

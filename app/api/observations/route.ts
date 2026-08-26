@@ -24,6 +24,16 @@ import {
   seedImageTickets,
 } from "../../../lib/tenant";
 
+function isValidObservedDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
 export async function GET(request: Request) {
   try {
     const teacherSession = await getTeacherSession(request);
@@ -38,12 +48,23 @@ export async function GET(request: Request) {
     const cursorValue = url.searchParams.get("cursor");
     const cursor = decodeCursor(cursorValue);
     if (cursorValue && !cursor) throw new HttpError(400, "갤러리 이어보기 정보가 올바르지 않습니다.");
+    const observedDate = url.searchParams.get("observedDate")?.trim() || null;
+    if (observedDate && !isValidObservedDate(observedDate)) {
+      throw new HttpError(400, "관찰 날짜 필터를 확인해 주세요.");
+    }
+    const studentNumberText = url.searchParams.get("studentNumber")?.trim() || "";
+    const studentNumber = studentNumberText ? Number(studentNumberText) : null;
+    if (studentNumber !== null && (!Number.isInteger(studentNumber) || studentNumber < 1 || studentNumber > 50)) {
+      throw new HttpError(400, "출석번호 필터는 1번부터 50번까지 입력해 주세요.");
+    }
 
     const accessToken = await getTeacherAccessToken(teacher);
     const page = await listObservationRows(accessToken, teacher, {
       limit,
       cursor,
       includeHidden: false,
+      observedDate,
+      studentNumber,
     });
     await seedImageTickets(
       teacher.id,

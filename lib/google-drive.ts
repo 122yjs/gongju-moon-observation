@@ -523,10 +523,14 @@ export async function listObservationRows(
     limit: number;
     cursor: { createdAt: string; id: string } | null;
     includeHidden: boolean;
+    observedDate?: string | null;
+    studentNumber?: number | null;
   },
 ): Promise<ObservationPage> {
   const all = (await readObservationRows(accessToken, teacher))
     .filter((row) => options.includeHidden || row.status === "visible")
+    .filter((row) => !options.observedDate || row.observedAt.startsWith(`${options.observedDate}T`))
+    .filter((row) => options.studentNumber == null || row.studentNumber === options.studentNumber)
     .sort(compareObservation);
   const afterCursor = options.cursor
     ? all.filter(

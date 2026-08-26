@@ -82,7 +82,7 @@
         <button type="button" data-view="today" onclick="showView('today')" class="nav-button nav-active min-h-11 rounded-xl border border-transparent px-2 py-2 text-xs sm:text-sm font-extrabold transition">오늘의 달</button>
         <button type="button" data-view="month" onclick="showView('month')" class="nav-button min-h-11 rounded-xl border border-space-600 bg-space-800 px-2 py-2 text-xs sm:text-sm font-bold text-slate-300 transition hover:bg-space-700">월간 변화</button>
         <button type="button" data-view="submit" onclick="showView('submit')" class="nav-button min-h-11 rounded-xl border border-space-600 bg-space-800 px-2 py-2 text-xs sm:text-sm font-bold text-slate-300 transition hover:bg-space-700">사진 제출</button>
-        <button type="button" data-view="gallery" onclick="showView('gallery')" class="nav-button min-h-11 rounded-xl border border-space-600 bg-space-800 px-2 py-2 text-xs sm:text-sm font-bold text-slate-300 transition hover:bg-space-700">전체보기</button>
+        <button type="button" data-view="gallery" onclick="showView('gallery')" class="nav-button min-h-11 rounded-xl border border-space-600 bg-space-800 px-2 py-2 text-xs sm:text-sm font-bold text-slate-300 transition hover:bg-space-700">우리반 달사진 보기</button>
       </nav>
     </div>
   </header>
@@ -254,9 +254,22 @@
       <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
           <p class="text-xs font-bold text-amber-300">우리 반이 함께 본 달</p>
-          <h2 id="galleryHeading" class="mt-1 text-2xl font-black">전체보기 <span id="galleryCount" class="text-base font-bold text-slate-500"></span></h2>
+          <h2 id="galleryHeading" class="mt-1 text-2xl font-black">우리반 달사진 보기 <span id="galleryCount" class="text-base font-bold text-slate-500"></span></h2>
         </div>
         <button type="button" onclick="refreshGallery()" class="rounded-xl border border-space-600 bg-space-800 px-4 py-2.5 text-sm font-bold text-slate-300 hover:border-amber-400 hover:text-amber-300">↻ 새로고침</button>
+      </div>
+      <div class="rounded-2xl border border-space-700 bg-space-800/70 p-4">
+        <form class="grid gap-3 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end" onsubmit="applyGalleryFilters(event)">
+          <label class="block text-sm font-bold">관찰 날짜
+            <input id="galleryObservedDateFilter" type="date" class="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white">
+          </label>
+          <label class="block text-sm font-bold">제출자 출석번호
+            <input id="galleryStudentNumberFilter" type="number" min="1" max="50" placeholder="전체" class="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white placeholder:text-slate-600">
+          </label>
+          <button type="submit" class="min-h-12 rounded-xl bg-amber-500 px-4 py-3 font-black text-space-950 hover:bg-amber-400">모아보기</button>
+          <button type="button" onclick="clearGalleryFilters()" class="min-h-12 rounded-xl border border-space-600 bg-space-900 px-4 py-3 font-bold text-slate-300 hover:border-space-500">초기화</button>
+        </form>
+        <p class="mt-3 text-xs leading-5 text-slate-500">날짜와 출석번호 중 하나만 선택하거나, 두 조건을 함께 지정할 수 있어요.</p>
       </div>
       <div id="galleryLoading" class="rounded-3xl border border-space-700 bg-space-800/70 py-16 text-center">
         <span class="spinner mx-auto block text-amber-300"></span>
@@ -264,8 +277,8 @@
       </div>
       <div id="emptyGallery" class="hidden rounded-3xl border border-dashed border-space-600 bg-space-800/50 py-16 text-center">
         <div class="text-5xl" aria-hidden="true">🌑</div>
-        <p class="mt-4 font-black">아직 제출된 사진이 없습니다.</p>
-        <p class="mt-1 text-sm text-slate-500">첫 번째 달 관찰 기록을 남겨 보세요!</p>
+        <p id="emptyGalleryTitle" class="mt-4 font-black">아직 제출된 사진이 없습니다.</p>
+        <p id="emptyGalleryDescription" class="mt-1 text-sm text-slate-500">첫 번째 달 관찰 기록을 남겨 보세요!</p>
       </div>
       <div id="photoGallery" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
       <div class="text-center">
@@ -306,6 +319,8 @@
     let pendingRequestId = '';
     let galleryCursor = null;
     let galleryLoaded = false;
+    let galleryObservedDate = '';
+    let galleryStudentNumber = '';
     let hasClassSession = false;
     let galleryRequestController = null;
     let toastTimer = null;
@@ -965,11 +980,26 @@
       document.getElementById('photoStatus').classList.add('hidden');
     }
 
+    function applyGalleryFilters(event) {
+      event.preventDefault();
+      galleryObservedDate = document.getElementById('galleryObservedDateFilter').value;
+      galleryStudentNumber = document.getElementById('galleryStudentNumberFilter').value.trim();
+      return refreshGallery();
+    }
+
+    function clearGalleryFilters() {
+      document.getElementById('galleryObservedDateFilter').value = '';
+      document.getElementById('galleryStudentNumberFilter').value = '';
+      galleryObservedDate = '';
+      galleryStudentNumber = '';
+      return refreshGallery();
+    }
+
     function refreshGallery() {
       galleryCursor = null;
       galleryLoaded = false;
       document.getElementById('photoGallery').replaceChildren();
-      loadGalleryPage(true);
+      return loadGalleryPage(true);
     }
 
     async function loadGalleryPage(replace) {
@@ -985,6 +1015,8 @@
       try {
         const query = new URLSearchParams({ limit: String(PAGE_SIZE) });
         if (galleryCursor) query.set('cursor', galleryCursor);
+        if (galleryObservedDate) query.set('observedDate', galleryObservedDate);
+        if (galleryStudentNumber) query.set('studentNumber', galleryStudentNumber);
         const response = await fetch(`/api/observations?${query}`, {
           credentials: 'same-origin',
           signal: requestController.signal
@@ -1000,12 +1032,16 @@
         renderGalleryItems(page.items || []);
         galleryCursor = page.nextCursor || null;
         document.getElementById('galleryCount').textContent = `(${Number(page.total) || 0}개)`;
+        const hasFilters = Boolean(galleryObservedDate || galleryStudentNumber);
+        document.getElementById('emptyGalleryTitle').textContent = hasFilters ? '조건에 맞는 사진이 없습니다.' : '아직 제출된 사진이 없습니다.';
+        document.getElementById('emptyGalleryDescription').textContent = hasFilters ? '날짜나 출석번호를 바꿔 다시 찾아보세요.' : '첫 번째 달 관찰 기록을 남겨 보세요!';
         document.getElementById('emptyGallery').classList.toggle('hidden', Number(page.total) !== 0);
         moreButton.classList.toggle('hidden', !page.hasMore);
       } catch (error) {
         if (error && error.name === 'AbortError') return;
         document.getElementById('emptyGallery').classList.remove('hidden');
-        document.getElementById('emptyGallery').querySelector('p').textContent = error && error.message ? error.message : '사진을 불러오지 못했습니다.';
+        document.getElementById('emptyGalleryTitle').textContent = error && error.message ? error.message : '사진을 불러오지 못했습니다.';
+        document.getElementById('emptyGalleryDescription').textContent = '잠시 후 새로고침해 주세요.';
       } finally {
         if (galleryRequestController === requestController) {
           galleryRequestController = null;
