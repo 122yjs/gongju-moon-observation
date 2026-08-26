@@ -109,7 +109,9 @@ test("lets the admin choose and regenerate QR codes per class", async () => {
   assert.match(inviteRoute, /rotateInviteToken\(target\.id/);
   assert.match(adminPage, /const \[qrClassId, setQrClassId\]/);
   assert.match(adminPage, /학생용 QR/);
-  assert.match(adminPage, /주소 복사/);
+  assert.match(adminPage, /학생용 주소 · 누르면 복사됩니다/);
+  assert.match(adminPage, /readOnly/);
+  assert.match(adminPage, /onClick=\{copyQrUrl\}/);
   assert.match(adminPage, /navigator\.clipboard\.writeText/);
   assert.match(adminPage, /window\.prompt/);
   assert.match(adminPage, /function deleteClass/);
@@ -118,7 +120,7 @@ test("lets the admin choose and regenerate QR codes per class", async () => {
   assert.match(adminPage, /되돌리기 어렵습니다/);
   assert.match(adminPage, /aria-label=\{`\$\{teacherClass\.classLabel\} 반 삭제`\}/);
   assert.match(adminPage, />\s*×\s*</);
-  assert.match(adminPage, /선택한 반 새 QR 만들기/);
+  assert.match(adminPage, /기존 QR코드 바꾸기/);
   assert.match(adminPage, /기존 QR 주소로는 새로 입장할 수 없지만/);
   assert.match(adminPage, /이미 입장한 기기의 60일 학생 세션은 유지됩니다/);
 });

@@ -504,6 +504,9 @@
   .transform {
     transform: var(--tw-rotate-x,) var(--tw-rotate-y,) var(--tw-rotate-z,) var(--tw-skew-x,) var(--tw-skew-y,);
   }
+  .cursor-copy {
+    cursor: copy;
+  }
   .cursor-not-allowed {
     cursor: not-allowed;
   }
@@ -1227,6 +1230,10 @@
     --tw-ease: var(--ease-in-out);
     transition-timing-function: var(--ease-in-out);
   }
+  .outline-none {
+    --tw-outline-style: none;
+    outline-style: none;
+  }
   .selection\:bg-amber-400 {
     & *::selection {
       background-color: var(--color-amber-400);
@@ -1372,6 +1379,11 @@
       @media (hover: hover) {
         color: var(--color-slate-400);
       }
+    }
+  }
+  .focus\:border-amber-400 {
+    &:focus {
+      border-color: var(--color-amber-400);
     }
   }
   .focus\:ring-2 {

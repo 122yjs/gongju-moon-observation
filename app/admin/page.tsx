@@ -447,16 +447,22 @@ export default function AdminPage() {
                 </div>
               ) : null}
               <p className="mt-3 text-center text-xs font-bold text-slate-400">{selectedQrClass?.classLabel || "반"} · {invite?.sessionDays || 60}일 유지</p>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                <button
+              <div className="mt-4 space-y-2">
+                <label className="block text-xs font-bold text-slate-400" htmlFor="qrJoinUrl">학생용 주소 · 누르면 복사됩니다</label>
+                <input
+                  id="qrJoinUrl"
+                  readOnly
+                  value={selectedQrClass?.joinUrl || ""}
                   onClick={copyQrUrl}
-                  disabled={!selectedQrClass?.joinUrl}
-                  className="rounded-xl border border-space-600 bg-space-900 px-4 py-2.5 text-sm font-black text-slate-100 hover:border-amber-400 disabled:opacity-50"
-                >
-                  주소 복사
-                </button>
+                  onFocus={(event) => event.currentTarget.select()}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void copyQrUrl();
+                  }}
+                  className="w-full cursor-copy rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-xs font-bold text-slate-100 outline-none hover:border-amber-400 focus:border-amber-400"
+                  aria-label="학생용 주소, 누르면 복사됩니다"
+                />
                 <span className="flex items-center gap-1">
-                  <button onClick={rotateInvite} className="min-w-0 flex-1 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-sm font-black text-amber-200">선택한 반 새 QR 만들기</button>
+                  <button onClick={rotateInvite} className="min-w-0 flex-1 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-sm font-black text-amber-200">기존 QR코드 바꾸기</button>
                   <HelpTip label="선택한 반의 새 입장 주소를 만듭니다. 기존 QR 주소로는 새로 입장할 수 없지만, 이미 입장한 기기의 60일 학생 세션은 유지됩니다." />
                 </span>
               </div>
