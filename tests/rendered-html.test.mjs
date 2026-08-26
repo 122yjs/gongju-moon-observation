@@ -108,17 +108,23 @@ test("stores account-level observation region settings for the student UI", asyn
   const settingsRoute = await readFile(new URL("../app/api/admin/settings/route.ts", import.meta.url), "utf8");
   const inviteRoute = await readFile(new URL("../app/api/admin/invite/route.ts", import.meta.url), "utf8");
   const sessionRoute = await readFile(new URL("../app/api/session/route.ts", import.meta.url), "utf8");
+  const workflow = await readFile(new URL("../.github/workflows/deploy.yml", import.meta.url), "utf8");
   assert.match(migration, /ALTER TABLE `teacher_accounts` ADD `region_label`/);
   assert.match(migration, /ALTER TABLE `teacher_accounts` ADD `region_short_label`/);
   assert.match(migration, /ALTER TABLE `teacher_accounts` ADD `observation_lat` real/);
   assert.match(migration, /ALTER TABLE `teacher_accounts` ADD `observation_lon` real/);
   assert.match(schema, /regionLabel: text\("region_label"\)/);
   assert.match(schema, /observationLat: real\("observation_lat"\)/);
+  assert.match(tenant, /function hasAccountRegionColumns/);
+  assert.match(tenant, /NULL AS account_region_label/);
   assert.match(tenant, /function updateAccountRegionSettings/);
+  assert.match(tenant, /지역 설정 DB 마이그레이션이 아직 적용되지 않았습니다/);
   assert.match(settingsRoute, /updateAccountRegionSettings\(teacher\.accountId/);
   assert.match(inviteRoute, /regionSettingsRequired: !teacher\.regionSettingsCompletedAt/);
   assert.match(sessionRoute, /regionLabel: teacher\.regionLabel/);
   assert.match(sessionRoute, /observationLat: teacher\.observationLat/);
+  assert.match(workflow, /npx wrangler d1 migrations apply DB --remote/);
+  assert.match(workflow, /continue-on-error: true/);
 });
 
 test("lets the admin choose and regenerate QR codes per class", async () => {

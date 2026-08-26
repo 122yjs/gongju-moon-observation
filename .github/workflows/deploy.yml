@@ -40,6 +40,9 @@ jobs:
         run: npx vinext build
 
       - name: Apply D1 migrations
+        # Cloudflare 토큰에 D1 query 권한이 없으면 실패할 수 있습니다.
+        # 앱 코드는 새 컬럼이 없어도 기본 지역값으로 동작하므로 배포 자체는 막지 않습니다.
+        continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           # 계정 ID는 비밀이 아니라 워크플로에 둡니다. 토큰만 Secrets에 넣으면 됩니다.

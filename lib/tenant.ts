@@ -232,6 +232,28 @@ export async function saveOAuthConfig(clientId: string, clientSecret: string) {
     .run();
 }
 
+let accountRegionColumnsReady: boolean | null = null;
+
+async function hasAccountRegionColumns() {
+  if (accountRegionColumnsReady !== null) return accountRegionColumnsReady;
+  try {
+    await getEnv().DB.prepare(
+      `SELECT
+         region_label,
+         region_short_label,
+         observation_lat,
+         observation_lon,
+         region_settings_completed_at
+       FROM teacher_accounts
+      LIMIT 1`,
+    ).first();
+    accountRegionColumnsReady = true;
+  } catch {
+    accountRegionColumnsReady = false;
+  }
+  return accountRegionColumnsReady;
+}
+
 async function findAccount(where: string, value: string) {
   const row = await getEnv().DB.prepare(
     `SELECT *
@@ -245,6 +267,18 @@ async function findAccount(where: string, value: string) {
 }
 
 async function findTeacher(where: string, value: string) {
+  const regionColumns = await hasAccountRegionColumns();
+  const accountRegionSelect = regionColumns
+    ? `ta.region_label AS account_region_label,
+       ta.region_short_label AS account_region_short_label,
+       ta.observation_lat AS account_observation_lat,
+       ta.observation_lon AS account_observation_lon,
+       ta.region_settings_completed_at AS account_region_settings_completed_at`
+    : `NULL AS account_region_label,
+       NULL AS account_region_short_label,
+       NULL AS account_observation_lat,
+       NULL AS account_observation_lon,
+       NULL AS account_region_settings_completed_at`;
   const row = await getEnv().DB.prepare(
     `SELECT
        tc.*,
@@ -255,11 +289,7 @@ async function findTeacher(where: string, value: string) {
        ta.refresh_token_ciphertext AS account_refresh_token_ciphertext,
        ta.access_token_ciphertext AS account_access_token_ciphertext,
        ta.access_token_expires_at AS account_access_token_expires_at,
-       ta.region_label AS account_region_label,
-       ta.region_short_label AS account_region_short_label,
-       ta.observation_lat AS account_observation_lat,
-       ta.observation_lon AS account_observation_lon,
-       ta.region_settings_completed_at AS account_region_settings_completed_at
+       ${accountRegionSelect}
      FROM teacher_connections tc
      LEFT JOIN teacher_accounts ta
        ON ta.id = CASE WHEN tc.account_id = '' THEN tc.id ELSE tc.account_id END
@@ -321,28 +351,48 @@ export async function createTeacherAccount(input: {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const refreshTokenCiphertext = await encryptString(input.refreshToken, `google-refresh-token:${id}`);
-  await getEnv().DB.prepare(
-    `INSERT INTO teacher_accounts (
-       id, google_permission_id, google_email, google_display_name,
-       refresh_token_ciphertext, access_token_ciphertext, access_token_expires_at,
-       region_label, region_short_label, observation_lat, observation_lon, region_settings_completed_at,
-       created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL, ?, ?)`,
-  )
-    .bind(
-      id,
-      input.googlePermissionId,
-      input.googleEmail,
-      input.googleDisplayName,
-      refreshTokenCiphertext,
-      DEFAULT_REGION_LABEL,
-      DEFAULT_REGION_SHORT_LABEL,
-      DEFAULT_OBSERVATION_LAT,
-      DEFAULT_OBSERVATION_LON,
-      now,
-      now,
+  if (await hasAccountRegionColumns()) {
+    await getEnv().DB.prepare(
+      `INSERT INTO teacher_accounts (
+         id, google_permission_id, google_email, google_display_name,
+         refresh_token_ciphertext, access_token_ciphertext, access_token_expires_at,
+         region_label, region_short_label, observation_lat, observation_lon, region_settings_completed_at,
+         created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL, ?, ?)`,
     )
-    .run();
+      .bind(
+        id,
+        input.googlePermissionId,
+        input.googleEmail,
+        input.googleDisplayName,
+        refreshTokenCiphertext,
+        DEFAULT_REGION_LABEL,
+        DEFAULT_REGION_SHORT_LABEL,
+        DEFAULT_OBSERVATION_LAT,
+        DEFAULT_OBSERVATION_LON,
+        now,
+        now,
+      )
+      .run();
+  } else {
+    await getEnv().DB.prepare(
+      `INSERT INTO teacher_accounts (
+         id, google_permission_id, google_email, google_display_name,
+         refresh_token_ciphertext, access_token_ciphertext, access_token_expires_at,
+         created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?)`,
+    )
+      .bind(
+        id,
+        input.googlePermissionId,
+        input.googleEmail,
+        input.googleDisplayName,
+        refreshTokenCiphertext,
+        now,
+        now,
+      )
+      .run();
+  }
   const account = await getTeacherAccountById(id);
   if (!account) throw new Error("교사 계정 연결 정보를 생성하지 못했습니다.");
   return account;
@@ -408,6 +458,9 @@ export async function updateAccountRegionSettings(
   const regionShortLabel = normalizeRegionLabel(input.regionShortLabel, "짧은 지역명", 20);
   const observationLat = normalizeCoordinate(input.observationLat, "위도", -90, 90);
   const observationLon = normalizeCoordinate(input.observationLon, "경도", -180, 180);
+  if (!(await hasAccountRegionColumns())) {
+    throw new HttpError(503, "지역 설정 DB 마이그레이션이 아직 적용되지 않았습니다. Cloudflare D1 권한을 확인해 주세요.");
+  }
   const now = new Date().toISOString();
   await getEnv().DB.prepare(
     `UPDATE teacher_accounts SET
