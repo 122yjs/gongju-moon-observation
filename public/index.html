@@ -485,7 +485,7 @@
       currentObservationLon = observationLon;
       const titleText = authenticated ? `${currentRegionShortLabel} 달 관찰 탐험대` : '달 관찰 탐험대';
       const headerText = authenticated
-        ? `📍 ${currentRegionLabel} 기준 · ${currentClassLabel}`
+        ? `📍 ${currentRegionShortLabel} 기준 · ${currentClassLabel}`
         : `📍 ${currentRegionLabel} 기준 · 수업 참여 전`;
       document.title = titleText;
       const appTitle = document.getElementById('studentAppTitle');
@@ -500,7 +500,7 @@
       if (calendarLabel) calendarLabel.textContent = authenticated ? `${currentRegionShortLabel} 하늘 달력` : '하늘 달력';
       if (locationNote) {
         locationNote.textContent = authenticated
-          ? `※ ${currentRegionLabel} 기준 좌표(${formatLatitude(currentObservationLat)}, ${formatLongitude(currentObservationLon)})의 교육용 천문 계산값입니다. 지형과 대기 상태에 따라 실제 관찰 시각은 조금 달라질 수 있습니다.`
+          ? `※ ${currentRegionShortLabel} 기준 좌표(${formatLatitude(currentObservationLat)}, ${formatLongitude(currentObservationLon)})의 교육용 천문 계산값입니다. 지형과 대기 상태에 따라 실제 관찰 시각은 조금 달라질 수 있습니다.`
           : '※ 수업 QR로 입장하면 선생님이 설정한 관찰 지역 기준으로 달 정보를 계산합니다. 지형과 대기 상태에 따라 실제 관찰 시각은 조금 달라질 수 있습니다.';
       }
       if (footerBrand) footerBrand.textContent = titleText;

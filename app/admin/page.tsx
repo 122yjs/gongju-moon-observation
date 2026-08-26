@@ -62,6 +62,73 @@ interface PageResult {
   message?: string;
 }
 
+const SINGLE_CITY_SHORT_LABELS = [
+  ["서울특별시", "서울"],
+  ["서울", "서울"],
+  ["부산광역시", "부산"],
+  ["부산", "부산"],
+  ["대구광역시", "대구"],
+  ["대구", "대구"],
+  ["인천광역시", "인천"],
+  ["인천", "인천"],
+  ["광주광역시", "광주"],
+  ["광주", "광주"],
+  ["대전광역시", "대전"],
+  ["대전", "대전"],
+  ["울산광역시", "울산"],
+  ["울산", "울산"],
+  ["세종특별자치시", "세종"],
+  ["세종", "세종"],
+] as const;
+
+const REGION_EXACT_SHORT_LABELS = [
+  ...SINGLE_CITY_SHORT_LABELS,
+  ["경기도", "경기"],
+  ["경기", "경기"],
+  ["강원도", "강원"],
+  ["강원", "강원"],
+  ["충청북도", "충북"],
+  ["충북", "충북"],
+  ["충청남도", "충남"],
+  ["충남", "충남"],
+  ["전라북도", "전북"],
+  ["전북", "전북"],
+  ["전라남도", "전남"],
+  ["전남", "전남"],
+  ["경상북도", "경북"],
+  ["경북", "경북"],
+  ["경상남도", "경남"],
+  ["경남", "경남"],
+  ["제주특별자치도", "제주"],
+  ["제주", "제주"],
+] as const;
+
+function compactRegionName(value: string) {
+  return value
+    .normalize("NFC")
+    .replace(/\s+/g, "")
+    .replace(/[^\p{L}\p{N}]/gu, "")
+    .toLocaleLowerCase("ko-KR");
+}
+
+function deriveStudentRegionLabel(value: string) {
+  const normalized = value.normalize("NFC").trim().replace(/\s+/g, " ");
+  if (!normalized) return "지역";
+  const compacted = compactRegionName(normalized);
+  for (const [label, shortLabel] of SINGLE_CITY_SHORT_LABELS) {
+    const key = compactRegionName(label);
+    if (compacted === key || (label.endsWith("시") && compacted.startsWith(key))) return shortLabel;
+  }
+  for (const [label, shortLabel] of REGION_EXACT_SHORT_LABELS) {
+    if (compacted === compactRegionName(label)) return shortLabel;
+  }
+  const lastToken = normalized.split(/\s+/).at(-1) || normalized;
+  const shortLabel = lastToken
+    .replace(/(특별자치시|특별자치도|특별시|광역시)$/u, "")
+    .replace(/(시|군)$/u, "");
+  return (shortLabel || lastToken).slice(0, 20);
+}
+
 function HelpTip({ label }: { label: string }) {
   const [open, setOpen] = useState(false);
   return (
@@ -125,6 +192,7 @@ export default function AdminPage() {
 
   const handleRegionLabelChange = useCallback((value: string) => {
     setRegionLabel(value);
+    setRegionShortLabel(deriveStudentRegionLabel(value));
     const query = value.trim();
     if (query.length < 2 || query === "관찰 지역") {
       setGeocodeItems([]);
@@ -244,13 +312,14 @@ export default function AdminPage() {
 
   async function saveRegionSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const nextRegionShortLabel = regionShortLabel.trim() || deriveStudentRegionLabel(regionLabel);
     const response = await fetch("/api/admin/settings", {
       method: "PATCH",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         regionLabel,
-        regionShortLabel,
+        regionShortLabel: nextRegionShortLabel,
         observationLat: Number(observationLat),
         observationLon: Number(observationLon),
       }),
@@ -265,13 +334,13 @@ export default function AdminPage() {
     };
     if (!response.ok) return setMessage(result.message || "관찰 지역 설정을 저장하지 못했습니다.");
     setRegionLabel(result.regionLabel || regionLabel);
-    setRegionShortLabel(result.regionShortLabel || regionShortLabel);
+    setRegionShortLabel(result.regionShortLabel || nextRegionShortLabel);
     setObservationLat(String(result.observationLat ?? observationLat));
     setObservationLon(String(result.observationLon ?? observationLon));
     setInvite((current) => current ? {
       ...current,
       regionLabel: result.regionLabel || regionLabel,
-      regionShortLabel: result.regionShortLabel || regionShortLabel,
+      regionShortLabel: result.regionShortLabel || nextRegionShortLabel,
       observationLat: result.observationLat ?? current.observationLat,
       observationLon: result.observationLon ?? current.observationLon,
       regionSettingsRequired: Boolean(result.regionSettingsRequired),
@@ -604,15 +673,15 @@ export default function AdminPage() {
             <form onSubmit={saveRegionSettings} className="mt-5 rounded-2xl border border-space-700 bg-space-900/70 p-4">
               <div className="flex items-center gap-2">
                 <h3 className="font-black">관찰 지역 설정</h3>
-                <HelpTip label="학생 화면 제목, 기준 지역 문구, 달 관찰 시간 계산에 쓰는 값입니다. 같은 Google 계정의 모든 반에 적용됩니다." />
+                <HelpTip label="학생 화면 제목과 지역 문구, 달 관찰 시간 계산에 쓰는 값입니다. 같은 Google 계정의 모든 반에 적용됩니다." />
               </div>
               <p className="mt-2 text-xs leading-5 text-slate-400">지역명을 입력하면 공개 행정구역 데이터에서 중심 좌표를 찾아 위도·경도를 채웁니다.</p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <label className="block text-sm font-bold">기준 지역명
-                  <input value={regionLabel} onChange={(event: ChangeEvent<HTMLInputElement>) => handleRegionLabelChange(event.target.value)} maxLength={40} required placeholder="예: 우리 지역" className="mt-2 w-full rounded-xl border border-space-600 bg-space-950 px-4 py-3" />
-                </label>
-                <label className="block text-sm font-bold">짧은 지역명
-                  <input value={regionShortLabel} onChange={(event: ChangeEvent<HTMLInputElement>) => setRegionShortLabel(event.target.value)} maxLength={20} required placeholder="예: 지역" className="mt-2 w-full rounded-xl border border-space-600 bg-space-950 px-4 py-3" />
+                <label className="block text-sm font-bold sm:col-span-2">기준 지역명
+                  <input value={regionLabel} onChange={(event: ChangeEvent<HTMLInputElement>) => handleRegionLabelChange(event.target.value)} maxLength={40} required placeholder="예: 공주시, 서울특별시, 경기 광주시" className="mt-2 w-full rounded-xl border border-space-600 bg-space-950 px-4 py-3" />
+                  <span className="mt-2 block text-xs font-medium leading-5 text-slate-400">
+                    확인과 저장은 기준 지역명으로 하고, 학생 화면에는 “{regionShortLabel || deriveStudentRegionLabel(regionLabel)}”로 표시합니다.
+                  </span>
                 </label>
                 <label className="block text-sm font-bold">위도
                   <input value={observationLat} onChange={(event: ChangeEvent<HTMLInputElement>) => setObservationLat(event.target.value)} type="number" step="0.0001" min="-90" max="90" required className="mt-2 w-full rounded-xl border border-space-600 bg-space-950 px-4 py-3" />

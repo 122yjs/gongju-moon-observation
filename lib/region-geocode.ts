@@ -2,6 +2,27 @@ import { KOREAN_REGION_CENTERS, KoreanRegionCenter } from "./korean-region-cente
 
 const MAX_RESULTS = 8;
 
+const SINGLE_CITY_SIDOS = new Set([
+  "서울특별시",
+  "부산광역시",
+  "대구광역시",
+  "인천광역시",
+  "광주광역시",
+  "대전광역시",
+  "울산광역시",
+  "세종특별자치시",
+]);
+
+const SAFE_SHORT_PREFIX_SIDOS = new Set([
+  "서울특별시",
+  "부산광역시",
+  "대구광역시",
+  "인천광역시",
+  "대전광역시",
+  "울산광역시",
+  "세종특별자치시",
+]);
+
 const SIDO_ALIASES: Record<string, string[]> = {
   서울특별시: ["서울"],
   부산광역시: ["부산"],
@@ -34,22 +55,42 @@ function regionLabel(region: KoreanRegionCenter) {
   return region.level === "sido" ? region.name : `${region.sido} ${region.name}`;
 }
 
+function regionShortLabel(region: KoreanRegionCenter) {
+  if (region.level === "sido") return region.shortName;
+  return region.name.endsWith("구") ? region.name : region.shortName;
+}
+
 function regionTokens(region: KoreanRegionCenter) {
   const aliases = SIDO_ALIASES[region.sido] || [];
-  const values = [
+  const values = region.level === "sido" ? [
+    region.name,
+    region.shortName,
+    ...aliases,
+  ] : [
     region.name,
     region.shortName,
     regionLabel(region),
     `${region.sido}${region.name}`,
     `${region.sido}${region.shortName}`,
-    ...aliases.flatMap((alias) => [alias, `${alias}${region.name}`, `${alias}${region.shortName}`]),
+    ...aliases.flatMap((alias) => [`${alias}${region.name}`, `${alias}${region.shortName}`]),
   ];
   return Array.from(new Set(values.map(compact).filter(Boolean)));
 }
 
 function scoreRegion(region: KoreanRegionCenter, query: string) {
+  if (region.level === "sigungu" && SINGLE_CITY_SIDOS.has(region.sido)) return 0;
   const tokens = regionTokens(region);
-  if (tokens.includes(query)) return region.level === "sigungu" ? 100 : 95;
+  if (tokens.includes(query)) return region.level === "sido" ? 110 : 100;
+  if (
+    region.level === "sido" &&
+    SINGLE_CITY_SIDOS.has(region.name) &&
+    (
+      query.startsWith(compact(region.name)) ||
+      (SAFE_SHORT_PREFIX_SIDOS.has(region.name) && tokens.some((token) => query.startsWith(token)))
+    )
+  ) {
+    return 105;
+  }
   if (tokens.some((token) => token.startsWith(query))) return region.level === "sigungu" ? 80 : 75;
   if (tokens.some((token) => token.includes(query))) return region.level === "sigungu" ? 60 : 55;
   return 0;
@@ -58,16 +99,18 @@ function scoreRegion(region: KoreanRegionCenter, query: string) {
 export function searchKoreanRegions(query: string) {
   const normalized = compact(query);
   if (normalized.length < 2) return [];
-  return KOREAN_REGION_CENTERS
+  const scored = KOREAN_REGION_CENTERS
     .map((region) => ({ region, score: scoreRegion(region, normalized) }))
-    .filter((entry) => entry.score > 0)
+    .filter((entry) => entry.score > 0);
+  const exactSido = scored.filter((entry) => entry.region.level === "sido" && entry.score === 110);
+  return (exactSido.length ? exactSido : scored)
     .sort((left, right) => right.score - left.score || left.region.code.localeCompare(right.region.code))
     .slice(0, MAX_RESULTS)
     .map(({ region }) => ({
       code: region.code,
       level: region.level,
       label: regionLabel(region),
-      shortLabel: region.shortName,
+      shortLabel: regionShortLabel(region),
       lat: region.lat,
       lon: region.lon,
       source: "KOSTAT 2013 행정구역 경계 중심 좌표",

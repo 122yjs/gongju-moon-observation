@@ -7,7 +7,6 @@
 
   function replaceLabels(result) {
     const classLabel = normalizedLabel(result.classLabel, "우리 반");
-    const regionLabel = normalizedLabel(result.regionLabel, "관찰 지역");
     const regionShortLabel = normalizedLabel(result.regionShortLabel, "지역");
     const title = `${regionShortLabel} 달 관찰 탐험대`;
     const appTitle = document.getElementById("studentAppTitle");
@@ -17,7 +16,7 @@
     const footerBrand = document.getElementById("footerBrand");
     document.title = title;
     if (appTitle) appTitle.textContent = title;
-    if (header) header.textContent = `📍 ${regionLabel} 기준 · ${classLabel}`;
+    if (header) header.textContent = `📍 ${regionShortLabel} 기준 · ${classLabel}`;
     if (submitLabel) submitLabel.textContent = classLabel;
     if (calendarLabel) calendarLabel.textContent = `${regionShortLabel} 하늘 달력`;
     if (footerBrand) footerBrand.textContent = title;

@@ -122,6 +122,8 @@ test("stores account-level observation region settings for the student UI", asyn
   assert.match(centers, /name: "공주시"/);
   assert.match(centers, /shortName: "공주"/);
   assert.match(geocode, /function scoreRegion/);
+  assert.match(geocode, /SINGLE_CITY_SIDOS/);
+  assert.match(geocode, /region\.level === "sigungu" && SINGLE_CITY_SIDOS\.has\(region\.sido\)/);
   assert.match(geocode, /searchKoreanRegions/);
   assert.match(geocodeRoute, /await requireTeacher\(request\)/);
   assert.match(geocodeRoute, /searchKoreanRegions\(normalized\)/);
@@ -168,6 +170,8 @@ test("renders the student-facing class name from the active session", async () =
   assert.match(html, /id="submitClassLabel"[^>]*>우리 반</);
   assert.match(html, /const DEFAULT_CLASS_LABEL = '우리 반'/);
   assert.match(html, /function setClassroomContext\(context\)/);
+  assert.match(html, /`\uD83D\uDCCD \$\{currentRegionShortLabel\} 기준 · \$\{currentClassLabel\}`/);
+  assert.match(html, /`\u203B \$\{currentRegionShortLabel\} 기준 좌표/);
   assert.match(html, /setClassroomContext\(sessionContext\)/);
   assert.match(html, /badge\.textContent = currentClassLabel/);
   assert.match(sessionRoute, /classLabel: teacher\.classLabel/);
@@ -204,6 +208,9 @@ test("clarifies admin sign-out and Drive disconnect actions with short help text
   assert.match(adminPage, /관찰 지역 설정/);
   assert.match(adminPage, /\/api\/admin\/geocode\?q=/);
   assert.match(adminPage, /지역명을 입력하면 공개 행정구역 데이터에서 중심 좌표를 찾아 위도·경도를 채웁니다/);
+  assert.match(adminPage, /function deriveStudentRegionLabel/);
+  assert.match(adminPage, /확인과 저장은 기준 지역명으로 하고, 학생 화면에는/);
+  assert.doesNotMatch(adminPage, /짧은 지역명/);
   assert.match(adminPage, /같은 이름의 지역이 여러 개입니다/);
   assert.match(adminPage, /같은 Google 계정의 모든 반에 적용됩니다/);
   assert.match(adminPage, /교사 Google 계정을 이 서비스에 연결합니다/);
