@@ -5,10 +5,12 @@ import {
   deleteDriveFile,
   getTeacherAccessToken,
   initializeTeacherDrive,
+  listObservationRows,
 } from "../../../../lib/google-drive";
 import { assertSameOrigin, errorResponse, HttpError, json } from "../../../../lib/http";
 import {
   createTeacherClass,
+  deleteTeacherClass,
   getTeacherAccountById,
   getTeacherById,
   listTeacherClasses,
@@ -114,6 +116,53 @@ export async function PATCH(request: Request) {
         ...(await responseFor(target.accountId, target.id)),
       },
       { headers: { "Set-Cookie": await createTeacherCookie(target.id) } },
+    );
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    assertSameOrigin(request);
+    const teacher = await requireTeacher(request);
+    const payload = (await request.json().catch(() => ({}))) as { classId?: unknown };
+    if (typeof payload.classId !== "string" || !/^[0-9a-f-]{36}$/i.test(payload.classId)) {
+      throw new HttpError(400, "삭제할 반을 확인해 주세요.");
+    }
+    const classes = await listTeacherClasses(teacher.accountId);
+    if (classes.length <= 1) {
+      throw new HttpError(400, "마지막 반은 삭제할 수 없습니다. 전체 해제는 Drive 연결 해제를 사용해 주세요.");
+    }
+    const target = await getTeacherById(payload.classId);
+    if (!target || target.accountId !== teacher.accountId) {
+      throw new HttpError(404, "같은 Google 계정의 반을 찾지 못했습니다.");
+    }
+    const accessToken = await getTeacherAccessToken(teacher);
+    const observations = await listObservationRows(accessToken, target, {
+      limit: 2000,
+      cursor: null,
+      includeHidden: true,
+    }).catch(() => ({ items: [] }));
+    await Promise.all(
+      observations.items.map((item) =>
+        deleteDriveFile(accessToken, item.imageFileId).catch(() => undefined),
+      ),
+    );
+    await deleteDriveFile(accessToken, target.spreadsheetId).catch(() => undefined);
+    await deleteDriveFile(accessToken, target.photosFolderId).catch(() => undefined);
+    await deleteDriveFile(accessToken, target.rootFolderId);
+    await deleteTeacherClass(target.id);
+    const activeClassId = target.id === teacher.id
+      ? classes.find((teacherClass) => teacherClass.id !== target.id)?.id
+      : teacher.id;
+    if (!activeClassId) throw new HttpError(500, "전환할 반을 찾지 못했습니다.");
+    return json(
+      {
+        ok: true,
+        ...(await responseFor(teacher.accountId, activeClassId)),
+      },
+      { headers: { "Set-Cookie": await createTeacherCookie(activeClassId) } },
     );
   } catch (error) {
     return errorResponse(error);

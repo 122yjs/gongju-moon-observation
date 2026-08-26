@@ -48,18 +48,31 @@ interface PageResult {
 }
 
 function HelpTip({ label }: { label: string }) {
+  const [open, setOpen] = useState(false);
   return (
-    <span className="group relative inline-flex align-middle">
+    <span
+      className="relative inline-flex align-middle"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={() => setOpen(false)}
+    >
       <button
         type="button"
         aria-label={label}
+        aria-expanded={open}
+        title={label}
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") setOpen(false);
+        }}
         className="grid size-7 place-items-center rounded-full border border-space-600 bg-space-900 text-xs font-black text-slate-400 hover:border-amber-400/50 hover:text-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-400/50"
       >
         ?
       </button>
       <span
         role="tooltip"
-        className="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-space-600 bg-space-900 p-3 text-left text-xs font-medium leading-5 text-slate-200 shadow-card group-hover:block group-focus-within:block"
+        className={`pointer-events-none absolute right-0 top-full z-20 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-space-600 bg-space-900 p-3 text-left text-xs font-medium leading-5 text-slate-200 shadow-card ${open ? "block" : "hidden"}`}
       >
         {label}
       </span>
@@ -165,6 +178,20 @@ export default function AdminPage() {
     setMessage(`${selectedClass.classLabel}의 새 학생 QR을 만들었습니다.`);
   }
 
+  async function copyQrUrl() {
+    const selectedClass = invite?.classes.find((teacherClass) => teacherClass.id === qrClassId)
+      || invite?.classes.find((teacherClass) => teacherClass.id === invite.activeClassId);
+    if (!selectedClass?.joinUrl) return setMessage("복사할 학생용 주소가 없습니다.");
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(selectedClass.joinUrl);
+      setMessage(`${selectedClass.classLabel} 학생용 주소를 복사했습니다.`);
+    } catch {
+      window.prompt("학생에게 보낼 주소입니다. 복사해 주세요.", selectedClass.joinUrl);
+      setMessage("브라우저가 자동 복사를 막았습니다. 열린 창에서 주소를 복사해 주세요.");
+    }
+  }
+
   async function switchClass(classId: string) {
     if (classId === invite?.activeClassId) return;
     const response = await fetch("/api/admin/classes", {
@@ -200,6 +227,27 @@ export default function AdminPage() {
     await loadData();
     setQrClassId(result.activeClassId || null);
     setMessage("새 반을 만들었습니다.");
+  }
+
+  async function deleteClass(teacherClass: ClassInfo) {
+    if ((invite?.classes.length || 0) <= 1) {
+      return setMessage("마지막 반은 삭제할 수 없습니다. 전체 해제는 Drive 연결 해제를 사용해 주세요.");
+    }
+    if (!window.confirm(`${teacherClass.classLabel} 반을 삭제할까요?\n\nDrive 폴더, 사진 파일, 제출 목록도 함께 삭제됩니다. 이 작업은 되돌리기 어렵습니다.`)) return;
+    const response = await fetch("/api/admin/classes", {
+      method: "DELETE",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ classId: teacherClass.id }),
+    });
+    const result = (await response.json().catch(() => ({}))) as { activeClassId?: string; message?: string };
+    if (!response.ok) return setMessage(result.message || "반을 삭제하지 못했습니다.");
+    setItems([]);
+    setCursor(null);
+    setHasMore(false);
+    await loadData();
+    setQrClassId(result.activeClassId || null);
+    setMessage(`${teacherClass.classLabel} 반과 Drive 자료를 삭제했습니다.`);
   }
 
   async function updateStatus(item: Observation) {
@@ -327,16 +375,32 @@ export default function AdminPage() {
               <div className="mt-4 space-y-2">
                 {(invite?.classes || []).map((teacherClass) => {
                   const active = teacherClass.id === invite?.activeClassId;
+                  const canDelete = (invite?.classes.length || 0) > 1;
                   return (
-                    <button
+                    <div
                       key={teacherClass.id}
-                      type="button"
-                      onClick={() => void switchClass(teacherClass.id)}
-                      className={`flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left text-sm font-bold ${active ? "border-amber-400/50 bg-amber-400/10 text-amber-100" : "border-space-600 bg-space-900 text-slate-200 hover:border-amber-400/50"}`}
+                      className={`relative overflow-hidden rounded-xl border text-sm font-bold ${active ? "border-amber-400/50 bg-amber-400/10 text-amber-100" : "border-space-600 bg-space-900 text-slate-200"}`}
                     >
-                      <span className="min-w-0 truncate">{teacherClass.classLabel}</span>
-                      <span className="shrink-0 text-xs text-slate-400">{active ? "현재 반" : "전환"}</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => void switchClass(teacherClass.id)}
+                        className="flex w-full min-w-0 items-center justify-between gap-3 px-4 py-3 pr-10 text-left hover:bg-amber-400/10"
+                      >
+                        <span className="min-w-0 truncate">{teacherClass.classLabel}</span>
+                        <span className="shrink-0 text-xs text-slate-400">{active ? "현재 반" : "전환"}</span>
+                      </button>
+                      {canDelete ? (
+                        <button
+                          type="button"
+                          onClick={() => void deleteClass(teacherClass)}
+                          aria-label={`${teacherClass.classLabel} 반 삭제`}
+                          title="이 반의 Drive 폴더, 사진 파일, 제출 목록을 삭제합니다."
+                          className="absolute right-2 top-2 grid size-6 place-items-center rounded-full border border-red-400/25 bg-red-400/10 text-sm font-black leading-none text-red-200 hover:bg-red-400/20"
+                        >
+                          ×
+                        </button>
+                      ) : null}
+                    </div>
                   );
                 })}
               </div>
@@ -349,7 +413,10 @@ export default function AdminPage() {
                   className="min-w-0 flex-1 rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-sm"
                   aria-label="새 반 이름"
                 />
-                <button disabled={!newClassLabel.trim() || loading} className="rounded-xl bg-amber-500 px-4 py-3 text-sm font-black text-space-950 disabled:opacity-50">새 반 만들기</button>
+                <span className="flex items-center gap-1">
+                  <button disabled={!newClassLabel.trim() || loading} className="min-w-0 flex-1 rounded-xl bg-amber-500 px-4 py-3 text-sm font-black text-space-950 disabled:opacity-50">새 반 만들기</button>
+                  <HelpTip label="새 Drive 폴더, 사진 폴더, 제출 목록, 학생용 QR을 가진 별도 반을 추가합니다." />
+                </span>
               </form>
             </article>
 
@@ -380,7 +447,19 @@ export default function AdminPage() {
                 </div>
               ) : null}
               <p className="mt-3 text-center text-xs font-bold text-slate-400">{selectedQrClass?.classLabel || "반"} · {invite?.sessionDays || 60}일 유지</p>
-              <button onClick={rotateInvite} className="mt-4 w-full rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-sm font-black text-amber-200">선택한 반 새 QR 만들기</button>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <button
+                  onClick={copyQrUrl}
+                  disabled={!selectedQrClass?.joinUrl}
+                  className="rounded-xl border border-space-600 bg-space-900 px-4 py-2.5 text-sm font-black text-slate-100 hover:border-amber-400 disabled:opacity-50"
+                >
+                  주소 복사
+                </button>
+                <span className="flex items-center gap-1">
+                  <button onClick={rotateInvite} className="min-w-0 flex-1 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-sm font-black text-amber-200">선택한 반 새 QR 만들기</button>
+                  <HelpTip label="선택한 반의 새 입장 주소를 만듭니다. 기존 QR 주소로는 새로 입장할 수 없지만, 이미 입장한 기기의 60일 학생 세션은 유지됩니다." />
+                </span>
+              </div>
             </article>
           </div>
 
@@ -391,7 +470,10 @@ export default function AdminPage() {
             </p>
             <form onSubmit={saveClassLabel} className="mt-5 flex flex-col gap-2 sm:flex-row">
               <input value={classLabel} onChange={(event: ChangeEvent<HTMLInputElement>) => setClassLabel(event.target.value)} maxLength={40} required className="min-w-0 flex-1 rounded-xl border border-space-600 bg-space-900 px-4 py-3" aria-label="학급명" />
-              <button className="rounded-xl bg-amber-500 px-5 py-3 font-black text-space-950">학급명 저장</button>
+              <span className="flex items-center gap-1">
+                <button className="min-w-0 flex-1 rounded-xl bg-amber-500 px-5 py-3 font-black text-space-950">학급명 변경</button>
+                <HelpTip label="현재 선택한 반의 화면 표시 이름만 바꿉니다. Drive 폴더, 제출 목록, 학생용 QR 주소는 그대로 유지됩니다." />
+              </span>
             </form>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <a href={invite?.rootFolderUrl || "#"} target="_blank" rel="noreferrer" className="rounded-xl border border-space-600 bg-space-900 p-4 font-bold hover:border-amber-400">Google Drive 폴더 열기</a>

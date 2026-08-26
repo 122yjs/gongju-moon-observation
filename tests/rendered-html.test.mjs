@@ -86,10 +86,19 @@ test("preserves existing class folders while splitting Google accounts from clas
   assert.match(tenant, /function getTeacherAccountByGooglePermissionId/);
   assert.match(tenant, /function listTeacherClasses/);
   assert.match(tenant, /function createTeacherClass/);
+  assert.match(tenant, /function deleteTeacherClass/);
   assert.match(callback, /getTeacherAccountByGooglePermissionId/);
   assert.match(callback, /getFirstTeacherByAccountId/);
   assert.match(classesRoute, /createClassRootFolder/);
   assert.match(classesRoute, /createTeacherCookie\(created\.id\)/);
+  assert.match(classesRoute, /export async function DELETE/);
+  assert.match(classesRoute, /listObservationRows\(accessToken, target/);
+  assert.match(classesRoute, /deleteDriveFile\(accessToken, item\.imageFileId\)/);
+  assert.match(classesRoute, /deleteDriveFile\(accessToken, target\.spreadsheetId\)/);
+  assert.match(classesRoute, /deleteDriveFile\(accessToken, target\.photosFolderId\)/);
+  assert.match(classesRoute, /deleteDriveFile\(accessToken, target\.rootFolderId\)/);
+  assert.match(classesRoute, /deleteTeacherClass\(target\.id\)/);
+  assert.match(classesRoute, /마지막 반은 삭제할 수 없습니다/);
 });
 
 test("lets the admin choose and regenerate QR codes per class", async () => {
@@ -100,11 +109,24 @@ test("lets the admin choose and regenerate QR codes per class", async () => {
   assert.match(inviteRoute, /rotateInviteToken\(target\.id/);
   assert.match(adminPage, /const \[qrClassId, setQrClassId\]/);
   assert.match(adminPage, /학생용 QR/);
+  assert.match(adminPage, /주소 복사/);
+  assert.match(adminPage, /navigator\.clipboard\.writeText/);
+  assert.match(adminPage, /window\.prompt/);
+  assert.match(adminPage, /function deleteClass/);
+  assert.match(adminPage, /method: "DELETE"/);
+  assert.match(adminPage, /Drive 폴더, 사진 파일, 제출 목록도 함께 삭제됩니다/);
+  assert.match(adminPage, /되돌리기 어렵습니다/);
+  assert.match(adminPage, /aria-label=\{`\$\{teacherClass\.classLabel\} 반 삭제`\}/);
+  assert.match(adminPage, />\s*×\s*</);
   assert.match(adminPage, /선택한 반 새 QR 만들기/);
+  assert.match(adminPage, /기존 QR 주소로는 새로 입장할 수 없지만/);
+  assert.match(adminPage, /이미 입장한 기기의 60일 학생 세션은 유지됩니다/);
 });
 
 test("clarifies admin sign-out and Drive disconnect actions with short help text", async () => {
   const adminPage = await readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8");
+  assert.match(adminPage, /onMouseEnter=\{\(\) => setOpen\(true\)\}/);
+  assert.match(adminPage, /aria-expanded=\{open\}/);
   assert.match(adminPage, /Google Drive 연결하기/);
   assert.match(adminPage, /교사 Google 계정을 이 서비스에 연결합니다/);
   assert.match(adminPage, /이 브라우저의 교사 화면 세션만 종료합니다/);
@@ -112,6 +134,11 @@ test("clarifies admin sign-out and Drive disconnect actions with short help text
   assert.match(adminPage, /Google Drive 생성\/관리 권한을 해제합니다/);
   assert.match(adminPage, /업로드된 파일과 반별 폴더·제출 목록은 Google Drive에 그대로 남습니다/);
   assert.match(adminPage, /현재 관리 중인 반과 다른 반의 QR도 선택해서 볼 수 있습니다/);
+  assert.match(adminPage, /새 Drive 폴더, 사진 폴더, 제출 목록, 학생용 QR을 가진 별도 반을 추가합니다\./);
+  assert.doesNotMatch(adminPage, /현재 반 이름을 바꾸는 기능이 아닙니다/);
+  assert.match(adminPage, /학급명 변경/);
+  assert.match(adminPage, /현재 선택한 반의 화면 표시 이름만 바꿉니다/);
+  assert.match(adminPage, /Drive 폴더, 제출 목록, 학생용 QR 주소는 그대로 유지됩니다/);
 });
 
 test("offers external high-quality capture, in-page camera fallback, and gallery separately", async () => {

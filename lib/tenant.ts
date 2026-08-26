@@ -453,6 +453,16 @@ export async function deleteTeacherAccount(accountId: string) {
   await db.batch(statements);
 }
 
+export async function deleteTeacherClass(teacherId: string) {
+  const db = getEnv().DB;
+  await db.batch([
+    db.prepare("DELETE FROM image_tickets WHERE teacher_id = ?").bind(teacherId),
+    db.prepare("DELETE FROM submission_events WHERE teacher_id = ?").bind(teacherId),
+    db.prepare("DELETE FROM submission_receipts WHERE teacher_id = ?").bind(teacherId),
+    db.prepare("DELETE FROM teacher_connections WHERE id = ?").bind(teacherId),
+  ]);
+}
+
 export interface SubmissionReceipt {
   requestId: string;
   teacherId: string;
