@@ -44,6 +44,16 @@ interface InviteInfo {
   classes: ClassInfo[];
 }
 
+interface GeocodeCandidate {
+  code: string;
+  level: "sido" | "sigungu";
+  label: string;
+  shortLabel: string;
+  lat: number;
+  lon: number;
+  source: string;
+}
+
 interface PageResult {
   items: Observation[];
   total: number;
@@ -102,6 +112,25 @@ export default function AdminPage() {
   const [regionShortLabel, setRegionShortLabel] = useState("지역");
   const [observationLat, setObservationLat] = useState("36.5");
   const [observationLon, setObservationLon] = useState("127.5");
+  const [geocodeItems, setGeocodeItems] = useState<GeocodeCandidate[]>([]);
+  const [regionSearchStatus, setRegionSearchStatus] = useState("");
+
+  const applyGeocodeCandidate = useCallback((candidate: GeocodeCandidate) => {
+    setRegionLabel(candidate.label);
+    setRegionShortLabel(candidate.shortLabel);
+    setObservationLat(String(candidate.lat));
+    setObservationLon(String(candidate.lon));
+    setRegionSearchStatus(`${candidate.label} 중심 좌표를 입력했습니다.`);
+  }, []);
+
+  const handleRegionLabelChange = useCallback((value: string) => {
+    setRegionLabel(value);
+    const query = value.trim();
+    if (query.length < 2 || query === "관찰 지역") {
+      setGeocodeItems([]);
+      setRegionSearchStatus("");
+    }
+  }, []);
 
   const loadData = useCallback(async (nextCursor: string | null = null, append = false) => {
     setLoading(true);
@@ -128,6 +157,8 @@ export default function AdminPage() {
       setRegionShortLabel(inviteResult.regionShortLabel);
       setObservationLat(String(inviteResult.observationLat));
       setObservationLon(String(inviteResult.observationLon));
+      setGeocodeItems([]);
+      setRegionSearchStatus("");
       setQrClassId((current) =>
         current && inviteResult.classes.some((teacherClass) => teacherClass.id === current)
           ? current
@@ -151,6 +182,44 @@ export default function AdminPage() {
       })
       .catch(() => setAuthenticated(false));
   }, [loadData]);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    const query = regionLabel.trim();
+    if (query.length < 2 || query === "관찰 지역") {
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setRegionSearchStatus("지역 좌표를 찾고 있어요…");
+      fetch(`/api/admin/geocode?q=${encodeURIComponent(query)}`, {
+        credentials: "same-origin",
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          const result = (await response.json().catch(() => ({}))) as { items?: GeocodeCandidate[]; message?: string };
+          if (!response.ok) throw new Error(result.message || "지역 좌표를 찾지 못했습니다.");
+          const items = result.items || [];
+          setGeocodeItems(items);
+          if (items.length === 1) {
+            applyGeocodeCandidate(items[0]);
+          } else if (items.length > 1) {
+            setRegionSearchStatus("같은 이름의 지역이 여러 개입니다. 아래에서 선택해 주세요.");
+          } else {
+            setRegionSearchStatus("일치하는 행정구역을 찾지 못했습니다. 위도·경도를 직접 입력해 주세요.");
+          }
+        })
+        .catch((error: unknown) => {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          setGeocodeItems([]);
+          setRegionSearchStatus(error instanceof Error ? error.message : "지역 좌표를 찾지 못했습니다.");
+        });
+    }, 350);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [applyGeocodeCandidate, authenticated, regionLabel]);
 
   async function saveClassLabel(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -537,9 +606,10 @@ export default function AdminPage() {
                 <h3 className="font-black">관찰 지역 설정</h3>
                 <HelpTip label="학생 화면 제목, 기준 지역 문구, 달 관찰 시간 계산에 쓰는 값입니다. 같은 Google 계정의 모든 반에 적용됩니다." />
               </div>
+              <p className="mt-2 text-xs leading-5 text-slate-400">지역명을 입력하면 공개 행정구역 데이터에서 중심 좌표를 찾아 위도·경도를 채웁니다.</p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <label className="block text-sm font-bold">기준 지역명
-                  <input value={regionLabel} onChange={(event: ChangeEvent<HTMLInputElement>) => setRegionLabel(event.target.value)} maxLength={40} required placeholder="예: 우리 지역" className="mt-2 w-full rounded-xl border border-space-600 bg-space-950 px-4 py-3" />
+                  <input value={regionLabel} onChange={(event: ChangeEvent<HTMLInputElement>) => handleRegionLabelChange(event.target.value)} maxLength={40} required placeholder="예: 우리 지역" className="mt-2 w-full rounded-xl border border-space-600 bg-space-950 px-4 py-3" />
                 </label>
                 <label className="block text-sm font-bold">짧은 지역명
                   <input value={regionShortLabel} onChange={(event: ChangeEvent<HTMLInputElement>) => setRegionShortLabel(event.target.value)} maxLength={20} required placeholder="예: 지역" className="mt-2 w-full rounded-xl border border-space-600 bg-space-950 px-4 py-3" />
@@ -551,6 +621,22 @@ export default function AdminPage() {
                   <input value={observationLon} onChange={(event: ChangeEvent<HTMLInputElement>) => setObservationLon(event.target.value)} type="number" step="0.0001" min="-180" max="180" required className="mt-2 w-full rounded-xl border border-space-600 bg-space-950 px-4 py-3" />
                 </label>
               </div>
+              {regionSearchStatus ? <p className="mt-3 rounded-xl border border-blue-400/20 bg-blue-400/10 px-3 py-2 text-xs font-bold text-blue-100" role="status">{regionSearchStatus}</p> : null}
+              {geocodeItems.length > 1 ? (
+                <div className="mt-3 flex flex-wrap gap-2" aria-label="지역 후보">
+                  {geocodeItems.map((item) => (
+                    <button
+                      key={item.code}
+                      type="button"
+                      onClick={() => applyGeocodeCandidate(item)}
+                      className="rounded-full border border-space-600 bg-space-950 px-3 py-2 text-xs font-bold text-slate-200 hover:border-amber-400/50 hover:text-amber-200"
+                      title={`${item.source} · 위도 ${item.lat}, 경도 ${item.lon}`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <button className="mt-4 w-full rounded-xl border border-amber-400/30 bg-amber-400/10 px-5 py-3 font-black text-amber-100 hover:bg-amber-400/20">관찰 지역 저장</button>
             </form>
             <form onSubmit={saveClassLabel} className="mt-5 flex flex-col gap-2 sm:flex-row">

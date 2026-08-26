@@ -105,6 +105,9 @@ test("stores account-level observation region settings for the student UI", asyn
   const migration = await readFile(new URL("../drizzle/0003_teacher_account_region_settings.sql", import.meta.url), "utf8");
   const schema = await readFile(new URL("../db/schema.ts", import.meta.url), "utf8");
   const tenant = await readFile(new URL("../lib/tenant.ts", import.meta.url), "utf8");
+  const centers = await readFile(new URL("../lib/korean-region-centers.ts", import.meta.url), "utf8");
+  const geocode = await readFile(new URL("../lib/region-geocode.ts", import.meta.url), "utf8");
+  const geocodeRoute = await readFile(new URL("../app/api/admin/geocode/route.ts", import.meta.url), "utf8");
   const settingsRoute = await readFile(new URL("../app/api/admin/settings/route.ts", import.meta.url), "utf8");
   const inviteRoute = await readFile(new URL("../app/api/admin/invite/route.ts", import.meta.url), "utf8");
   const sessionRoute = await readFile(new URL("../app/api/session/route.ts", import.meta.url), "utf8");
@@ -115,6 +118,13 @@ test("stores account-level observation region settings for the student UI", asyn
   assert.match(migration, /ALTER TABLE `teacher_accounts` ADD `observation_lon` real/);
   assert.match(schema, /regionLabel: text\("region_label"\)/);
   assert.match(schema, /observationLat: real\("observation_lat"\)/);
+  assert.match(centers, /KOSTAT 2013 행정구역 경계 데이터/);
+  assert.match(centers, /name: "공주시"/);
+  assert.match(centers, /shortName: "공주"/);
+  assert.match(geocode, /function scoreRegion/);
+  assert.match(geocode, /searchKoreanRegions/);
+  assert.match(geocodeRoute, /await requireTeacher\(request\)/);
+  assert.match(geocodeRoute, /searchKoreanRegions\(normalized\)/);
   assert.match(tenant, /function hasAccountRegionColumns/);
   assert.match(tenant, /NULL AS account_region_label/);
   assert.match(tenant, /function updateAccountRegionSettings/);
@@ -192,6 +202,9 @@ test("clarifies admin sign-out and Drive disconnect actions with short help text
   assert.match(adminPage, /Google Drive 연결하기/);
   assert.match(adminPage, /Google Drive를 처음 연결한 뒤 학생 화면에 표시할 지역명과 달 계산 기준 좌표를 설정합니다/);
   assert.match(adminPage, /관찰 지역 설정/);
+  assert.match(adminPage, /\/api\/admin\/geocode\?q=/);
+  assert.match(adminPage, /지역명을 입력하면 공개 행정구역 데이터에서 중심 좌표를 찾아 위도·경도를 채웁니다/);
+  assert.match(adminPage, /같은 이름의 지역이 여러 개입니다/);
   assert.match(adminPage, /같은 Google 계정의 모든 반에 적용됩니다/);
   assert.match(adminPage, /교사 Google 계정을 이 서비스에 연결합니다/);
   assert.match(adminPage, /이 브라우저의 교사 화면 세션만 종료합니다/);
