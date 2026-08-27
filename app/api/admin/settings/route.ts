@@ -23,7 +23,7 @@ export async function GET(request: Request) {
       googleDisplayName: teacher.googleDisplayName,
       googleEmail: teacher.googleEmail,
       rootFolderUrl: `https://drive.google.com/drive/folders/${teacher.rootFolderId}`,
-      spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${teacher.spreadsheetId}/edit`,
+      spreadsheetUrl: `/api/admin/spreadsheet?classId=${encodeURIComponent(teacher.id)}`,
     });
   } catch (error) {
     return errorResponse(error);

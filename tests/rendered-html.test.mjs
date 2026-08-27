@@ -119,6 +119,37 @@ test("stores new student submissions only in teacher Drive and Sheets", async ()
   assert.doesNotMatch(route, /BUCKET\.put|INSERT INTO observations|db\.add\(/);
 });
 
+test("opens a protected Korean-time summary while preserving the raw observation sheet", async () => {
+  const drive = await readFile(new URL("../lib/google-drive.ts", import.meta.url), "utf8");
+  const spreadsheetRoute = await readFile(
+    new URL("../app/api/admin/spreadsheet/route.ts", import.meta.url),
+    "utf8",
+  );
+  const inviteRoute = await readFile(new URL("../app/api/admin/invite/route.ts", import.meta.url), "utf8");
+  const classesRoute = await readFile(new URL("../app/api/admin/classes/route.ts", import.meta.url), "utf8");
+  const settingsRoute = await readFile(new URL("../app/api/admin/settings/route.ts", import.meta.url), "utf8");
+
+  assert.match(drive, /const SUMMARY_SHEET_TITLE = "제출 목록"/);
+  assert.match(drive, /properties: \{ timeZone: "Asia\/Seoul" \}/);
+  assert.match(drive, /properties: \{ sheetId: teacher\.sheetId, hidden: true \}/);
+  assert.match(drive, /\[\["이름", "출석번호", "관찰 시각 \(한국 시간\)", "설명", "사진 용량", "사진 원본 링크"\]\]/);
+  assert.match(drive, /HYPERLINK\(\$\{raw\}!M2:M\$\{endRow\},"사진 열기"\)/);
+  assert.match(drive, /\$\{raw\}!K2:K\$\{endRow\}="visible"/);
+  assert.match(drive, /warningOnly: true/);
+  assert.match(drive, /await ensureTeacherSummarySheet\(accessToken/);
+
+  assert.match(drive, /const range = `\$\{quoteSheetTitle\(teacher\.sheetTitle\)\}!A:M`/);
+  assert.match(drive, /sheetId: teacher\.sheetId/);
+  assert.match(drive, /sheetTitle,\s*\n\s*};/);
+
+  assert.match(spreadsheetRoute, /ensureTeacherSummarySheet\(accessToken, target\)/);
+  assert.match(spreadsheetRoute, /\/preview`/);
+  assert.match(spreadsheetRoute, /previewUrl\.searchParams\.set\("gid", String\(summarySheetId\)\)/);
+  assert.match(inviteRoute, /\/api\/admin\/spreadsheet\?classId=/);
+  assert.match(classesRoute, /\/api\/admin\/spreadsheet\?classId=/);
+  assert.match(settingsRoute, /\/api\/admin\/spreadsheet\?classId=/);
+});
+
 test("keeps student PII out of long-lived central D1 tables", async () => {
   const migration = [
     await readFile(new URL("../drizzle/0001_drive_oauth.sql", import.meta.url), "utf8"),

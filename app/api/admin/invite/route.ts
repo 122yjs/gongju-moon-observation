@@ -38,7 +38,7 @@ async function responseFor(request: Request, teacher: Awaited<ReturnType<typeof 
         classLabel: detail.classLabel,
         joinUrl: `${origin}/join?t=${encodeURIComponent(token)}`,
         rootFolderUrl: `https://drive.google.com/drive/folders/${detail.rootFolderId}`,
-        spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${detail.spreadsheetId}/edit`,
+        spreadsheetUrl: `${origin}/api/admin/spreadsheet?classId=${encodeURIComponent(detail.id)}`,
         createdAt: detail.createdAt,
         updatedAt: detail.updatedAt,
       };
@@ -53,7 +53,7 @@ async function responseFor(request: Request, teacher: Awaited<ReturnType<typeof 
     googleEmail: teacher.googleEmail,
     googleDisplayName: teacher.googleDisplayName,
     rootFolderUrl: `https://drive.google.com/drive/folders/${teacher.rootFolderId}`,
-    spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${teacher.spreadsheetId}/edit`,
+    spreadsheetUrl: `${origin}/api/admin/spreadsheet?classId=${encodeURIComponent(teacher.id)}`,
     regionLabel: teacher.regionLabel,
     regionShortLabel: teacher.regionShortLabel,
     observationLat: teacher.observationLat,

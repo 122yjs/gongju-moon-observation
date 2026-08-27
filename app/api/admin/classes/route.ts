@@ -38,7 +38,7 @@ function classLinks(teacherClass: Awaited<ReturnType<typeof listTeacherClasses>>
     id: teacherClass.id,
     classLabel: teacherClass.classLabel,
     rootFolderUrl: `https://drive.google.com/drive/folders/${teacherClass.rootFolderId}`,
-    spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${teacherClass.spreadsheetId}/edit`,
+    spreadsheetUrl: `/api/admin/spreadsheet?classId=${encodeURIComponent(teacherClass.id)}`,
     createdAt: teacherClass.createdAt,
     updatedAt: teacherClass.updatedAt,
   };

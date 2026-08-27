@@ -16,6 +16,8 @@ const REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 const SPREADSHEET_MIME = "application/vnd.google-apps.spreadsheet";
 const MAX_SHEET_ROWS = 2000;
+const SUMMARY_SHEET_TITLE = "제출 목록";
+const SUMMARY_PROTECTION_DESCRIPTION = "앱이 자동으로 관리하는 읽기 전용 제출 목록";
 
 interface OAuthTokenResponse {
   access_token: string;
@@ -50,7 +52,27 @@ interface PermissionList {
 }
 
 interface SpreadsheetMetadata {
-  sheets?: Array<{ properties?: { sheetId?: number; title?: string } }>;
+  properties?: { timeZone?: string };
+  sheets?: Array<{
+    properties?: {
+      sheetId?: number;
+      title?: string;
+      index?: number;
+      hidden?: boolean;
+    };
+    protectedRanges?: Array<{
+      protectedRangeId?: number;
+      description?: string;
+      warningOnly?: boolean;
+      range?: { sheetId?: number };
+    }>;
+  }>;
+}
+
+interface BatchUpdateSpreadsheetResponse {
+  replies?: Array<{
+    addSheet?: { properties?: { sheetId?: number; title?: string } };
+  }>;
 }
 
 interface ValueRange {
@@ -269,12 +291,25 @@ async function updateSheetValues(
   spreadsheetId: string,
   range: string,
   values: unknown[][],
+  valueInputOption: "RAW" | "USER_ENTERED" = "RAW",
 ) {
-  const query = new URLSearchParams({ valueInputOption: "RAW" });
+  const query = new URLSearchParams({ valueInputOption });
   await googleJson(
     `${SHEETS_API}/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}?${query}`,
     accessToken,
     { method: "PUT", body: JSON.stringify({ range, majorDimension: "ROWS", values }) },
+  );
+}
+
+async function batchUpdateSpreadsheet(
+  accessToken: string,
+  spreadsheetId: string,
+  requests: unknown[],
+) {
+  return googleJson<BatchUpdateSpreadsheetResponse>(
+    `${SHEETS_API}/spreadsheets/${encodeURIComponent(spreadsheetId)}:batchUpdate`,
+    accessToken,
+    { method: "POST", body: JSON.stringify({ requests }) },
   );
 }
 
@@ -308,6 +343,166 @@ async function renameAndFormatSheet(
       }),
     },
   );
+}
+
+function summaryFormula(rawSheetTitle: string) {
+  const raw = quoteSheetTitle(rawSheetTitle);
+  const endRow = MAX_SHEET_ROWS + 1;
+  return `=ARRAYFORMULA(IFERROR(SORT(FILTER({${raw}!E2:E${endRow},${raw}!D2:D${endRow},SUBSTITUTE(${raw}!F2:F${endRow},"T"," "),${raw}!G2:G${endRow},IF(${raw}!J2:J${endRow}="","",ROUND(${raw}!J2:J${endRow}/1048576,2)&" MB"),IF(${raw}!M2:M${endRow}="","",HYPERLINK(${raw}!M2:M${endRow},"사진 열기"))},${raw}!A2:A${endRow}<>"",${raw}!K2:K${endRow}="visible"),3,FALSE),""))`;
+}
+
+export async function ensureTeacherSummarySheet(
+  accessToken: string,
+  teacher: Pick<TeacherDriveResources, "spreadsheetId" | "sheetId" | "sheetTitle">,
+) {
+  const fields = [
+    "properties(timeZone)",
+    "sheets(properties(sheetId,title,index,hidden),protectedRanges(protectedRangeId,description,warningOnly,range(sheetId)))",
+  ].join(",");
+  const metadata = await googleJson<SpreadsheetMetadata>(
+    `${SHEETS_API}/spreadsheets/${encodeURIComponent(teacher.spreadsheetId)}?${new URLSearchParams({ fields })}`,
+    accessToken,
+  );
+  const rawSheet = metadata.sheets?.find(
+    (sheet) => sheet.properties?.sheetId === teacher.sheetId,
+  );
+  if (!rawSheet?.properties?.title) {
+    throw new HttpError(502, "Google Sheets 원본 기록 탭을 찾지 못했습니다.");
+  }
+
+  let summarySheet = metadata.sheets?.find(
+    (sheet) => sheet.properties?.title === SUMMARY_SHEET_TITLE,
+  );
+  const setupRequests: unknown[] = [];
+  if (metadata.properties?.timeZone !== "Asia/Seoul") {
+    setupRequests.push({
+      updateSpreadsheetProperties: {
+        properties: { timeZone: "Asia/Seoul" },
+        fields: "timeZone",
+      },
+    });
+  }
+  if (summarySheet?.properties?.sheetId == null) {
+    setupRequests.push({
+      addSheet: {
+        properties: {
+          title: SUMMARY_SHEET_TITLE,
+          index: 0,
+          gridProperties: {
+            rowCount: MAX_SHEET_ROWS + 1,
+            columnCount: 6,
+            frozenRowCount: 1,
+          },
+        },
+      },
+    });
+  } else {
+    setupRequests.push({
+      updateSheetProperties: {
+        properties: {
+          sheetId: summarySheet.properties.sheetId,
+          index: 0,
+          hidden: false,
+          gridProperties: { frozenRowCount: 1 },
+        },
+        fields: "index,hidden,gridProperties.frozenRowCount",
+      },
+    });
+  }
+  if (!rawSheet.properties.hidden) {
+    setupRequests.push({
+      updateSheetProperties: {
+        properties: { sheetId: teacher.sheetId, hidden: true },
+        fields: "hidden",
+      },
+    });
+  }
+
+  if (setupRequests.length > 0) {
+    const result = await batchUpdateSpreadsheet(
+      accessToken,
+      teacher.spreadsheetId,
+      setupRequests,
+    );
+    if (summarySheet?.properties?.sheetId == null) {
+      const added = result.replies?.find((reply) => reply.addSheet)?.addSheet?.properties;
+      const addedSheetId = Number(added?.sheetId);
+      if (!Number.isInteger(addedSheetId)) {
+        throw new HttpError(502, "Google Sheets 제출 목록 탭을 만들지 못했습니다.");
+      }
+      summarySheet = { properties: { ...added, sheetId: addedSheetId } };
+    }
+  }
+
+  const summarySheetId = Number(summarySheet?.properties?.sheetId);
+  if (!Number.isInteger(summarySheetId)) {
+    throw new HttpError(502, "Google Sheets 제출 목록 탭을 준비하지 못했습니다.");
+  }
+  const summaryTitle = quoteSheetTitle(SUMMARY_SHEET_TITLE);
+  await updateSheetValues(
+    accessToken,
+    teacher.spreadsheetId,
+    `${summaryTitle}!A1:F1`,
+    [["이름", "출석번호", "관찰 시각 (한국 시간)", "설명", "사진 용량", "사진 원본 링크"]],
+  );
+  await updateSheetValues(
+    accessToken,
+    teacher.spreadsheetId,
+    `${summaryTitle}!A2`,
+    [[summaryFormula(rawSheet.properties.title)]],
+    "USER_ENTERED",
+  );
+
+  const protectedRange = summarySheet?.protectedRanges?.find(
+    (item) => item.description === SUMMARY_PROTECTION_DESCRIPTION,
+  );
+  const protectedRangeSettings = {
+    range: { sheetId: summarySheetId },
+    description: SUMMARY_PROTECTION_DESCRIPTION,
+    warningOnly: true,
+  };
+  const formatRequests: unknown[] = [
+    {
+      repeatCell: {
+        range: { sheetId: summarySheetId, startRowIndex: 0, endRowIndex: 1 },
+        cell: {
+          userEnteredFormat: {
+            backgroundColor: { red: 0.95, green: 0.75, blue: 0.2 },
+            horizontalAlignment: "CENTER",
+            textFormat: { bold: true },
+          },
+        },
+        fields: "userEnteredFormat(backgroundColor,horizontalAlignment,textFormat.bold)",
+      },
+    },
+    ...[120, 90, 170, 320, 110, 120].map((pixelSize, index) => ({
+      updateDimensionProperties: {
+        range: {
+          sheetId: summarySheetId,
+          dimension: "COLUMNS",
+          startIndex: index,
+          endIndex: index + 1,
+        },
+        properties: { pixelSize },
+        fields: "pixelSize",
+      },
+    })),
+  ];
+  if (Number.isInteger(protectedRange?.protectedRangeId)) {
+    formatRequests.push({
+      updateProtectedRange: {
+        protectedRange: {
+          protectedRangeId: protectedRange?.protectedRangeId,
+          ...protectedRangeSettings,
+        },
+        fields: "range,description,warningOnly",
+      },
+    });
+  } else {
+    formatRequests.push({ addProtectedRange: { protectedRange: protectedRangeSettings } });
+  }
+  await batchUpdateSpreadsheet(accessToken, teacher.spreadsheetId, formatRequests);
+  return summarySheetId;
 }
 
 export async function initializeTeacherDrive(
@@ -359,6 +554,12 @@ export async function initializeTeacherDrive(
       "사진 링크",
     ]],
   );
+
+  await ensureTeacherSummarySheet(accessToken, {
+    spreadsheetId: spreadsheet.id,
+    sheetId,
+    sheetTitle,
+  });
 
   return {
     rootFolderId,
