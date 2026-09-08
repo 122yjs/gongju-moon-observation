@@ -327,10 +327,14 @@
     let galleryObservedDate = '';
     let galleryStudentNumber = '';
     let hasClassSession = false;
+    let sessionCheckPromise = null;
+    let sessionCheckNeedsRetry = false;
+    let lastSessionContext = null;
     let galleryRequestController = null;
     let toastTimer = null;
     let cameraStream = null;
     const DRAFT_KEY = 'moon-observation-draft-v1';
+    const SESSION_RESUME_KEY = 'moon-class-resume-v1';
     const DRAFT_FIELDS = ['studentNumber', 'studentName', 'observedAt', 'memo'];
     const DRAFT_MAX_AGE = 24 * 60 * 60 * 1000;
     let draftScope = '';
@@ -493,7 +497,10 @@
       window.addEventListener('pagehide', saveObservationDraft);
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') saveObservationDraft();
+        else retrySessionCheck();
       });
+      window.addEventListener('pageshow', retrySessionCheck);
+      window.addEventListener('focus', retrySessionCheck);
     }
 
     function saveObservationDraft() {
@@ -595,19 +602,70 @@
       }
     }
 
-    async function checkSession() {
+    function retrySessionCheck() {
+      const pending = sessionCheckPromise;
+      Promise.resolve(pending).finally(() => {
+        if (sessionCheckNeedsRetry && document.visibilityState === 'visible') checkSession();
+      });
+    }
+
+    function readSessionResumeToken() {
+      try { return sessionStorage.getItem(SESSION_RESUME_KEY) || ''; } catch (_) { return ''; }
+    }
+
+    function storeSessionResumeToken(value) {
+      try {
+        if (typeof value === 'string' && value.length >= 32) sessionStorage.setItem(SESSION_RESUME_KEY, value);
+      } catch (_) { /* Tab storage may be disabled. */ }
+    }
+
+    function clearSessionResumeToken() {
+      try { sessionStorage.removeItem(SESSION_RESUME_KEY); } catch (_) { /* Tab storage may be disabled. */ }
+    }
+
+    async function resumeClassSession(token) {
+      const response = await fetch('/api/session', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resumeToken: token })
+      });
+      if (response.status === 401) {
+        clearSessionResumeToken();
+        return null;
+      }
+      if (!response.ok) throw new Error('수업 참여 복원 요청이 실패했습니다.');
+      return response.json();
+    }
+
+    function checkSession() {
+      if (sessionCheckPromise) return sessionCheckPromise;
+      sessionCheckPromise = runSessionCheck().finally(() => { sessionCheckPromise = null; });
+      return sessionCheckPromise;
+    }
+
+    async function runSessionCheck() {
       const banner = document.getElementById('sessionBanner');
-      let sessionContext = null;
       try {
         const response = await fetch('/api/session', { credentials: 'same-origin' });
-        const result = await response.json();
+        if (!response.ok) throw new Error('수업 참여 확인 요청이 실패했습니다.');
+        let result = await response.json();
+        const resumeToken = readSessionResumeToken();
+        if (!result.authenticated && resumeToken) {
+          result = (await resumeClassSession(resumeToken)) || result;
+        }
         hasClassSession = Boolean(result.authenticated);
-        sessionContext = hasClassSession ? result : null;
+        lastSessionContext = hasClassSession ? result : null;
+        if (hasClassSession) storeSessionResumeToken(result.resumeToken);
+        sessionCheckNeedsRetry = false;
       } catch (_) {
-        hasClassSession = false;
+        // Android may suspend an in-flight request while the system camera is
+        // foreground. A network interruption is not proof that the QR session
+        // ended, so preserve a confirmed session and retry on return.
+        sessionCheckNeedsRetry = true;
       }
-      setClassroomContext(sessionContext);
-      if (hasClassSession) restoreObservationDraft(sessionContext);
+      setClassroomContext(lastSessionContext);
+      if (hasClassSession) restoreObservationDraft(lastSessionContext);
 
       document.querySelectorAll('[data-view="submit"], [data-view="gallery"]').forEach((button) => {
         button.disabled = !hasClassSession;
@@ -619,7 +677,9 @@
         : 'mb-5 rounded-2xl border border-blue-400/20 bg-blue-400/[.07] px-4 py-3 text-sm leading-6 text-blue-100';
       banner.textContent = hasClassSession
         ? '✓ 수업 참여가 확인되었습니다. 사진 제출과 우리 반 갤러리를 이용할 수 있어요.'
-        : '달 정보는 자유롭게 볼 수 있어요. 사진 제출과 우리 반 갤러리는 선생님이 안내한 수업 QR로 입장해 주세요.';
+        : sessionCheckNeedsRetry
+          ? '카메라 사용 중 수업 참여 확인이 잠시 멈췄어요. 화면으로 돌아오면 자동으로 다시 확인합니다.'
+          : '달 정보는 자유롭게 볼 수 있어요. 사진 제출과 우리 반 갤러리는 선생님이 안내한 수업 QR로 입장해 주세요.';
     }
 
     function showView(name) {

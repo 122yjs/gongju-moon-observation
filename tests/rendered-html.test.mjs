@@ -259,7 +259,7 @@ test("renders the student-facing class name from the active session", async () =
   assert.match(html, /function setClassroomContext\(context\)/);
   assert.match(html, /`\uD83D\uDCCD \$\{currentRegionShortLabel\} 기준 · \$\{currentClassLabel\}`/);
   assert.match(html, /`\u203B \$\{currentRegionShortLabel\} 기준 좌표/);
-  assert.match(html, /setClassroomContext\(sessionContext\)/);
+  assert.match(html, /setClassroomContext\(lastSessionContext\)/);
   assert.match(html, /badge\.textContent = currentClassLabel/);
   assert.match(sessionRoute, /classLabel: teacher\.classLabel/);
   assert.doesNotMatch(html, /초등 4학년 1반|<strong>4학년 1반<\/strong>|badge\.textContent = '4학년 1반'/);
@@ -479,6 +479,9 @@ test("protects OAuth and class sessions and keeps the student session for 60 day
   const start = await readFile(new URL("../app/api/google/start/route.ts", import.meta.url), "utf8");
   const callback = await readFile(new URL("../app/api/google/callback/route.ts", import.meta.url), "utf8");
   assert.match(auth, /STUDENT_SESSION_MAX_AGE = 60 \* 24 \* 60 \* 60/);
+  assert.match(auth, /STUDENT_RESUME_MAX_AGE = 6 \* 60 \* 60/);
+  assert.match(auth, /createStudentResumeToken/);
+  assert.match(auth, /getStudentResumeSession/);
   assert.match(auth, /HttpOnly; Secure; SameSite=/);
   assert.match(start, /createOAuthStateCookie/);
   assert.match(callback, /safeSecretEqual\(expectedState, state\)/);

@@ -6,13 +6,14 @@ const TEACHER_COOKIE = "moon_teacher_session";
 const OPERATOR_COOKIE = "moon_operator_session";
 const OAUTH_STATE_COOKIE = "moon_google_oauth_state";
 const STUDENT_SESSION_MAX_AGE = 60 * 24 * 60 * 60;
+const STUDENT_RESUME_MAX_AGE = 6 * 60 * 60;
 const TEACHER_SESSION_MAX_AGE = 30 * 24 * 60 * 60;
 const OPERATOR_SESSION_MAX_AGE = 12 * 60 * 60;
 const OAUTH_STATE_MAX_AGE = 10 * 60;
 const encoder = new TextEncoder();
 
 export interface SessionPayload {
-  role: "student" | "teacher" | "operator";
+  role: "student" | "student-resume" | "teacher" | "operator";
   teacherId?: string;
   sid: string;
   exp: number;
@@ -49,7 +50,7 @@ async function verifySession(value: string | null, role: SessionPayload["role"])
       !payload.sid ||
       !Number.isFinite(payload.exp) ||
       payload.exp <= Math.floor(Date.now() / 1000) ||
-      ((role === "student" || role === "teacher") && !payload.teacherId)
+      ((role === "student" || role === "student-resume" || role === "teacher") && !payload.teacherId)
     ) {
       return null;
     }
@@ -85,6 +86,15 @@ export async function createStudentCookie(teacherId: string) {
     exp: Math.floor(Date.now() / 1000) + STUDENT_SESSION_MAX_AGE,
   });
   return cookie(STUDENT_COOKIE, value, STUDENT_SESSION_MAX_AGE);
+}
+
+export function createStudentResumeToken(teacherId: string) {
+  return signSession({
+    role: "student-resume",
+    teacherId,
+    sid: crypto.randomUUID(),
+    exp: Math.floor(Date.now() / 1000) + STUDENT_RESUME_MAX_AGE,
+  });
 }
 
 export async function createTeacherCookie(teacherId: string) {
@@ -135,6 +145,10 @@ export function clearOAuthStateCookie() {
 
 export function getStudentSession(request: Request) {
   return verifySession(readCookie(request, STUDENT_COOKIE), "student");
+}
+
+export function getStudentResumeSession(value: string) {
+  return verifySession(value, "student-resume");
 }
 
 export function getTeacherSession(request: Request) {

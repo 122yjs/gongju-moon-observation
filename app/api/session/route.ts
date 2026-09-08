@@ -1,6 +1,8 @@
 import {
   clearStudentCookie,
   createStudentCookie,
+  createStudentResumeToken,
+  getStudentResumeSession,
   getStudentSession,
   safeSecretEqual,
   sha256Hex,
@@ -38,6 +40,7 @@ export async function GET(request: Request) {
     return json({
       authenticated: true,
       draftScope: await sha256Hex(`student-draft:${teacher.id}`),
+      resumeToken: await createStudentResumeToken(teacher.id),
       classLabel: teacher.classLabel,
       regionLabel: teacher.regionLabel,
       regionShortLabel: teacher.regionShortLabel,
@@ -52,7 +55,29 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
-    const payload = (await request.json()) as { token?: unknown };
+    const payload = (await request.json()) as { token?: unknown; resumeToken?: unknown };
+    if (typeof payload.resumeToken === "string") {
+      if (payload.resumeToken.length < 32 || payload.resumeToken.length > 1024) {
+        throw new HttpError(401, "수업 참여 확인을 복원하지 못했습니다.");
+      }
+      const resumeSession = await getStudentResumeSession(payload.resumeToken);
+      const resumedTeacher = resumeSession?.teacherId ? await getTeacherById(resumeSession.teacherId) : null;
+      if (!resumedTeacher) throw new HttpError(401, "수업 참여 확인을 복원하지 못했습니다.");
+      return json(
+        {
+          ok: true,
+          authenticated: true,
+          draftScope: await sha256Hex(`student-draft:${resumedTeacher.id}`),
+          resumeToken: await createStudentResumeToken(resumedTeacher.id),
+          classLabel: resumedTeacher.classLabel,
+          regionLabel: resumedTeacher.regionLabel,
+          regionShortLabel: resumedTeacher.regionShortLabel,
+          observationLat: resumedTeacher.observationLat,
+          observationLon: resumedTeacher.observationLon,
+        },
+        { headers: { "Set-Cookie": await createStudentCookie(resumedTeacher.id) } },
+      );
+    }
     if (typeof payload.token !== "string" || payload.token.length < 32 || payload.token.length > 256) {
       throw new HttpError(401, "유효하지 않거나 만료된 수업 참여 링크입니다.");
     }
@@ -64,6 +89,9 @@ export async function POST(request: Request) {
     return json(
       {
         ok: true,
+        authenticated: true,
+        draftScope: await sha256Hex(`student-draft:${teacher.id}`),
+        resumeToken: await createStudentResumeToken(teacher.id),
         classLabel: teacher.classLabel,
         regionLabel: teacher.regionLabel,
         regionShortLabel: teacher.regionShortLabel,
