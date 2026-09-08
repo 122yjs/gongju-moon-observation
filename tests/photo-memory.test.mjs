@@ -182,6 +182,41 @@ test('a camera permission response after navigation stops the newly opened track
   assert.equal(b.getElement('photoInput').disabled, false);
 });
 
+test('the in-page camera uses a full-resolution still photo instead of the preview frame', async () => {
+  const stillPhoto = jpeg(4000, 3000);
+  let capturedTrack = null;
+  let takePhotoCalls = 0;
+  const track = { kind: 'video', stopped: false, stop() { this.stopped = true; } };
+  const stream = {
+    getTracks: () => [track],
+    getVideoTracks: () => [track],
+  };
+  class StillImageCapture {
+    constructor(value) { capturedTrack = value; }
+    async takePhoto() {
+      takePhotoCalls += 1;
+      return stillPhoto;
+    }
+  }
+  const b = browser({
+    ImageCapture: StillImageCapture,
+    navigator: { mediaDevices: { getUserMedia: async () => stream } },
+  });
+  b.getElement('cameraPreview').videoWidth = 1280;
+  b.getElement('cameraPreview').videoHeight = 720;
+
+  await b.api.startCamera();
+  await b.api.captureCameraPhoto();
+
+  assert.equal(capturedTrack, track);
+  assert.equal(takePhotoCalls, 1);
+  assert.equal(track.stopped, true);
+  assert.equal(b.decodes.length, 1, 'the still photo should enter the bounded image compressor');
+  assert.equal(b.decodes[0].options.resizeWidth, 2560);
+  assert.equal(b.decodes[0].options.resizeHeight, 1920);
+  assert.equal(b.getElement('photoPreview').src, 'blob:photo');
+});
+
 test('PNG with decoder-applied EXIF rotation keeps its portrait aspect ratio', async () => {
   const png = new Uint8Array(24);
   const data = new DataView(png.buffer);

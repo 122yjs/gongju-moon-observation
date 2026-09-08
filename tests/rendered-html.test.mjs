@@ -313,21 +313,22 @@ test("clarifies admin sign-out and Drive disconnect actions with short help text
   assert.match(adminPage, /Drive 폴더, 제출 목록, 학생용 QR 주소는 그대로 유지됩니다/);
 });
 
-test("offers external high-quality capture, in-page camera fallback, and gallery separately", async () => {
+test("offers in-page high-resolution still capture with an external camera fallback", async () => {
   const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
   assert.match(html, /<input[^>]*id="captureInput"[^>]*type="file"[^>]*>/);
   assert.match(html, /<input[^>]*id="captureInput"[^>]*accept="image\/\*"[^>]*>/);
   assert.match(html, /<input[^>]*id="captureInput"[^>]*capture="environment"[^>]*>/);
   assert.match(html, /<input[^>]*id="captureInput"[^>]*onchange="previewPhoto\(event, 'capture'\)"[^>]*>/);
-  assert.match(html, /고화질 촬영/);
+  assert.match(html, /<button[^>]*id="highQualityCameraButton"[^>]*onclick="openHighQualityCamera\(\)"[^>]*>/);
+  assert.match(html, /페이지 안 고화질 촬영/);
   assert.match(html, /<input[^>]*id="photoInput"[^>]*type="file"[^>]*>/);
   assert.match(html, /<input[^>]*id="photoInput"[^>]*accept="image\/\*"[^>]*>/);
   assert.match(html, /<input[^>]*id="photoInput"[^>]*onchange="previewPhoto\(event, 'gallery'\)"[^>]*>/);
   assert.doesNotMatch(html, /<input[^>]*id="photoInput"[^>]*capture=/);
   assert.match(html, /<details[^>]*id="cameraFallback"[^>]*>/);
-  assert.match(html, /촬영이 안 될 때/);
-  assert.match(html, /페이지 안 카메라 열기/);
-  assert.doesNotMatch(html, /<button[^>]*onclick="startCamera\(\)"[^>]*>[\s\S]*?카메라로 촬영[\s\S]*?<\/button>/);
+  assert.match(html, /기기 카메라 앱으로 촬영/);
+  assert.match(html, /ImageCapture/);
+  assert.match(html, /takePhoto\(\)/);
   assert.match(html, /<button[^>]*type="button"[^>]*onclick="startCamera\(\)"[^>]*>/);
   assert.match(html, /<video[^>]*id="cameraPreview"[^>]*autoplay[^>]*playsinline[^>]*>/);
   assert.match(html, /<button[^>]*type="button"[^>]*onclick="captureCameraPhoto\(\)"[^>]*>/);
