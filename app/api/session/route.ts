@@ -37,6 +37,7 @@ export async function GET(request: Request) {
     }
     return json({
       authenticated: true,
+      draftScope: await sha256Hex(`student-draft:${teacher.id}`),
       classLabel: teacher.classLabel,
       regionLabel: teacher.regionLabel,
       regionShortLabel: teacher.regionShortLabel,
