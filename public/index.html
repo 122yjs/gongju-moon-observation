@@ -337,6 +337,11 @@
     const SESSION_RESUME_KEY = 'moon-class-resume-v1';
     const DRAFT_FIELDS = ['studentNumber', 'studentName', 'observedAt', 'memo'];
     const DRAFT_MAX_AGE = 24 * 60 * 60 * 1000;
+    const CAMERA_PENDING_KEY = 'moon-camera-pending-v1';
+    const CAMERA_PENDING_MAX_AGE = 30 * 60 * 1000;
+    const PAGE_INSTANCE_ID = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     let draftScope = '';
     let draftHasEdits = false;
     const DEFAULT_CLASS_LABEL = '우리 반';
@@ -492,9 +497,12 @@
       };
       form.addEventListener('input', rememberInput);
       form.addEventListener('change', rememberInput);
+      const captureInput = document.getElementById('captureInput');
+      captureInput.addEventListener('click', prepareExternalCamera);
+      captureInput.addEventListener('cancel', clearCameraPending);
       // Save synchronously before leaving for an Android camera or gallery app.
-      form.addEventListener('click', saveObservationDraft);
-      window.addEventListener('pagehide', saveObservationDraft);
+      form.addEventListener('click', () => saveObservationDraft());
+      window.addEventListener('pagehide', () => saveObservationDraft());
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') saveObservationDraft();
         else retrySessionCheck();
@@ -503,14 +511,65 @@
       window.addEventListener('focus', retrySessionCheck);
     }
 
-    function saveObservationDraft() {
-      if (!draftScope || !draftHasEdits) return;
+    function saveObservationDraft(force = false) {
+      if (!draftScope || (!draftHasEdits && !force)) return;
       try {
         const fields = Object.fromEntries(DRAFT_FIELDS.map((id) => [id, document.getElementById(id).value]));
         sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ scope: draftScope, savedAt: Date.now(), fields }));
       } catch (_) {
         // Storage can be disabled or full; the current form must still work.
       }
+    }
+
+    function writeCameraPending() {
+      if (!draftScope) return;
+      try {
+        sessionStorage.setItem(CAMERA_PENDING_KEY, JSON.stringify({
+          scope: draftScope,
+          startedAt: Date.now(),
+          pageId: PAGE_INSTANCE_ID,
+        }));
+      } catch (_) {
+        // Camera launch must continue when tab storage is unavailable.
+      }
+    }
+
+    function clearCameraPending() {
+      try { sessionStorage.removeItem(CAMERA_PENDING_KEY); } catch (_) { /* Storage may be disabled. */ }
+    }
+
+    function readCameraPending() {
+      try {
+        const pending = JSON.parse(sessionStorage.getItem(CAMERA_PENDING_KEY));
+        if (!pending || typeof pending.scope !== 'string' || typeof pending.pageId !== 'string' ||
+            !Number.isFinite(pending.startedAt)) {
+          clearCameraPending();
+          return null;
+        }
+        const age = Date.now() - pending.startedAt;
+        if (age < 0 || age > CAMERA_PENDING_MAX_AGE) {
+          clearCameraPending();
+          return null;
+        }
+        return pending;
+      } catch (_) {
+        clearCameraPending();
+        return null;
+      }
+    }
+
+    function restoreCameraPending(context) {
+      const pending = readCameraPending();
+      const scope = context && typeof context.draftScope === 'string' ? context.draftScope : '';
+      if (!pending) return;
+      if (!scope || pending.scope !== scope) {
+        clearCameraPending();
+        return;
+      }
+      if (pending.pageId === PAGE_INSTANCE_ID) return;
+      clearCameraPending();
+      showView('submit');
+      showPhotoStatus('촬영 중 화면이 다시 시작됐어요. 작성 내용을 복원했습니다. 고화질 촬영을 다시 눌러 주세요.', false);
     }
 
     function restoreObservationDraft(context) {
@@ -543,6 +602,7 @@
     function clearObservationDraft() {
       draftHasEdits = false;
       try { sessionStorage.removeItem(DRAFT_KEY); } catch (_) { /* Storage may be disabled. */ }
+      clearCameraPending();
     }
 
     function formatLatitude(value) {
@@ -665,7 +725,10 @@
         sessionCheckNeedsRetry = true;
       }
       setClassroomContext(lastSessionContext);
-      if (hasClassSession) restoreObservationDraft(lastSessionContext);
+      if (hasClassSession) {
+        restoreObservationDraft(lastSessionContext);
+        restoreCameraPending(lastSessionContext);
+      }
 
       document.querySelectorAll('[data-view="submit"], [data-view="gallery"]').forEach((button) => {
         button.disabled = !hasClassSession;
@@ -981,7 +1044,18 @@
       }
     }
 
+    function prepareExternalCamera() {
+      if (photoProcessing || submissionBusy) return;
+      saveObservationDraft(true);
+      writeCameraPending();
+      stopCamera();
+      releasePhoto();
+      const input = document.getElementById('captureInput');
+      if (input) input.value = '';
+    }
+
     async function previewPhoto(event, source = 'gallery') {
+      if (source === 'capture') clearCameraPending();
       if (photoProcessing || submissionBusy) {
         event.target.value = '';
         return;

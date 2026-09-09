@@ -15,10 +15,10 @@ async function page(saved, scope = 'class-a') {
   const elements = new Map();
   const events = new Map();
   const element = (id) => {
-    if (!elements.has(id)) elements.set(id, { id, value: '', dataset: {},
+    if (!elements.has(id)) elements.set(id, { id, value: '', textContent: '', className: '', dataset: {},
       classList: { add() {}, remove() {}, toggle() {} },
       addEventListener: (name, fn) => events.set(`${id}:${name}`, fn),
-      setAttribute() {}, removeAttribute() {},
+      setAttribute() {}, removeAttribute(name) { delete this[name]; },
     });
     return elements.get(id);
   };
@@ -34,7 +34,9 @@ async function page(saved, scope = 'class-a') {
   element('observationForm').reset = () => fields.forEach((id) => { element(id).value = ''; });
   runInNewContext(script + `
     renderToday = () => {}; renderCalendar = () => {};
-    globalThis.api = { checkSession, submitObservation, attachPhoto };
+    globalThis.api = {
+      checkSession, submitObservation, attachPhoto, prepareExternalCamera, previewPhoto,
+    };
   `, context);
   events.get('DOMContentLoaded')();
   await new Promise((resolve) => setImmediate(resolve));
@@ -100,4 +102,66 @@ test('failed submission retains the draft for a reload and retry', async () => {
   first.context.fetch = async () => { throw Error('offline'); };
   await first.context.api.submitObservation({ preventDefault() {} });
   assert.equal((await page(saved)).element('studentName').value, '김학생');
+});
+
+test('external camera preparation force-saves fields and records pending state', async () => {
+  const saved = storage();
+  const first = await page(saved);
+  const values = ['7', '김학생', '2026-09-09T20:15', '남쪽 하늘'];
+  fields.forEach((id, index) => { first.element(id).value = values[index]; });
+  first.context.api.attachPhoto(new Blob(['old photo'], { type: 'image/jpeg' }));
+
+  first.context.api.prepareExternalCamera();
+
+  const draft = JSON.parse(saved.getItem('moon-observation-draft-v1'));
+  assert.deepEqual(fields.map((id) => draft.fields[id]), values);
+  const pending = JSON.parse(saved.getItem('moon-camera-pending-v1'));
+  assert.equal(pending.scope, 'class-a');
+  assert.equal(typeof pending.startedAt, 'number');
+  assert.equal(typeof pending.pageId, 'string');
+  assert.equal(first.element('photoPreview').src, undefined);
+});
+
+test('a recreated document restores fields and shows a one-time retake notice', async () => {
+  const saved = storage();
+  const first = await page(saved);
+  const values = ['5', '복원 학생', '2026-09-09T20:30', '카메라 전환 직전'];
+  fields.forEach((id, index) => { first.element(id).value = values[index]; });
+  first.context.api.prepareExternalCamera();
+
+  const recreated = await page(saved);
+
+  assert.deepEqual(fields.map((id) => recreated.element(id).value), values);
+  assert.match(recreated.element('photoStatus').textContent, /다시 시작|다시 눌러/);
+  assert.equal(saved.getItem('moon-camera-pending-v1'), null);
+});
+
+test('same-document return and camera cancellation clear pending state without recreation notice', async () => {
+  const saved = storage();
+  const first = await page(saved);
+  first.context.api.prepareExternalCamera();
+  await first.context.api.checkSession();
+  assert.doesNotMatch(first.element('photoStatus').textContent, /다시 시작/);
+
+  first.events.get('captureInput:cancel')();
+  assert.equal(saved.getItem('moon-camera-pending-v1'), null);
+
+  first.context.api.prepareExternalCamera();
+  await first.context.api.previewPhoto({ target: { files: [], value: 'cancelled' } }, 'capture');
+  assert.equal(saved.getItem('moon-camera-pending-v1'), null);
+});
+
+test('invalid, expired, and cross-class pending markers are removed without recovery', async () => {
+  const cases = [
+    { value: '{broken', scope: 'class-a' },
+    { value: JSON.stringify({ scope: 'class-a', startedAt: Date.now() - 31 * 60 * 1000, pageId: 'old' }), scope: 'class-a' },
+    { value: JSON.stringify({ scope: 'class-a', startedAt: Date.now(), pageId: 'old' }), scope: 'class-b' },
+  ];
+
+  for (const item of cases) {
+    const saved = storage({ 'moon-camera-pending-v1': item.value });
+    const current = await page(saved, item.scope);
+    assert.equal(saved.getItem('moon-camera-pending-v1'), null);
+    assert.doesNotMatch(current.element('photoStatus').textContent, /다시 시작/);
+  }
 });

@@ -332,6 +332,11 @@ test("offers external high-quality capture, in-page camera fallback, and gallery
   assert.match(html, /<video[^>]*id="cameraPreview"[^>]*autoplay[^>]*playsinline[^>]*>/);
   assert.match(html, /<button[^>]*type="button"[^>]*onclick="captureCameraPhoto\(\)"[^>]*>/);
   assert.match(html, /navigator\.mediaDevices\.getUserMedia/);
+  assert.match(html, /const CAMERA_PENDING_KEY = ['"]moon-camera-pending-v1['"]/);
+  assert.match(html, /function prepareExternalCamera\(\)/);
+  assert.match(html, /captureInput\.addEventListener\(['"]cancel['"], clearCameraPending\)/);
+  assert.match(html, /촬영 중 화면이 다시 시작됐어요/);
+  assert.doesNotMatch(html, /페이지 안 고화질 촬영/);
 });
 
 test("allows larger compressed photos for high-quality camera uploads", async () => {

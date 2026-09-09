@@ -139,7 +139,7 @@ const PAGE_INSTANCE_ID = typeof crypto !== 'undefined' && typeof crypto.randomUU
 
 - [ ] **Step 2: Make draft saving forceable and add pending helpers.**
 
-Change `saveObservationDraft()` to accept `force = false`; use `(!draftHasEdits && !force)` in its guard. Keep its existing field serialization and exception handling.
+Change `saveObservationDraft()` to accept `force = false`; use `(!draftHasEdits && !force)` in its guard. Keep its existing field serialization and exception handling. Because DOM callbacks pass an event object as their first argument, register the ordinary click and pagehide saves as `() => saveObservationDraft()` wrappers; only the camera-preparation path may pass `true`.
 
 Add these functions immediately after it:
 
