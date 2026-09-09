@@ -509,6 +509,7 @@ test("ships student moon guidance copy in the built page", async () => {
   assert.match(built, /id="observationGuidanceCard"/);
   assert.match(built, /나침반 열기/);
   assert.match(built, /지금은 너무 늦었어요/);
+  assert.match(built, /오늘은 달을 관찰하기 어려운 날이에요/);
   assert.match(built, /async function openCompass/);
   assert.doesNotMatch(built, /안 보여요/);
 });

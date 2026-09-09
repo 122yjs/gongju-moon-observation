@@ -108,6 +108,7 @@ hasClassSession = true;
 globalThis.api = {
   MoonEngine, showView, openCompass, closeCompass, maybeShowLateNightDialog,
   restFromLateNight, stayFromLateNight, renderToday, renderSubmitObservationSupport,
+  setSelectedDate(date) { selectedDate = date; },
 };
 `,
     context,
@@ -136,6 +137,8 @@ test("shows easy moon-time names next to textbook terms", () => {
   assert.match(html, /role="dialog"/);
   assert.match(html, /aria-modal="true"/);
   assert.match(html, /기기 센서에 따라 방향이 조금 다를 수 있어요/);
+  assert.match(html, /오늘은 달을 관찰하기 어려운 날이에요/);
+  assert.match(html, /id="observationTipCard"/);
   assert.doesNotMatch(html, /안 보여요/);
 });
 
@@ -189,9 +192,27 @@ test("observation guidance prefers daylight, then moon below, then a dark moon",
   });
   assert.equal(visible.kind, "observable");
   assert.equal(visible.title, "지금 달을 관찰해 볼 수 있어요");
+
+  const hardDay = api.MoonEngine.decideObservationGuidance({
+    sunAltitudeDeg: 10,
+    moonAltitudeDeg: 20,
+    illuminationFraction: 0.8,
+    hardDay: true,
+  });
+  assert.equal(hardDay.kind, "hard-day");
+  assert.equal(hardDay.title, "오늘은 달을 관찰하기 어려운 날이에요");
 });
 
-test("recommended observation windows stay above the moon, below twilight, and outside 01:00-05:00", () => {
+test("student evening hours run from 17:00 inclusive to 01:00 exclusive", () => {
+  const { api } = loadStudentPage();
+  assert.equal(api.MoonEngine.isStudentObservationHour(new Date(2026, 8, 9, 16, 59, 0)), false);
+  assert.equal(api.MoonEngine.isStudentObservationHour(new Date(2026, 8, 9, 17, 0, 0)), true);
+  assert.equal(api.MoonEngine.isStudentObservationHour(new Date(2026, 8, 9, 0, 59, 0)), true);
+  assert.equal(api.MoonEngine.isStudentObservationHour(new Date(2026, 8, 9, 1, 0, 0)), false);
+  assert.equal(api.MoonEngine.isStudentObservationHour(new Date(2026, 8, 9, 5, 10, 0)), false);
+});
+
+test("recommended observation windows stay above the moon, below twilight, and in the evening", () => {
   const { api } = loadStudentPage();
   const lat = 36.5;
   const lon = 127.5;
@@ -202,6 +223,7 @@ test("recommended observation windows stay above the moon, below twilight, and o
   }
   assert.ok(found, "a recommended window should exist within two weeks of 2026-09-01");
   assert.equal(api.MoonEngine.isLateNightHour(found.time), false);
+  assert.equal(api.MoonEngine.isStudentObservationHour(found.time), true);
   assert.ok(api.MoonEngine.getMoonPosition(found.time, lat, lon).altitude * 180 / Math.PI >= 5);
   assert.ok(api.MoonEngine.getSunPosition(found.time, lat, lon).altitude * 180 / Math.PI <= -6);
 
@@ -209,6 +231,7 @@ test("recommended observation windows stay above the moon, below twilight, and o
   const afterLate = api.MoonEngine.findNextObservationWindow(lateStart, lat, lon);
   if (afterLate) {
     assert.equal(api.MoonEngine.isLateNightHour(afterLate.time), false);
+    assert.equal(api.MoonEngine.isStudentObservationHour(afterLate.time), true);
     assert.ok(afterLate.time.getTime() >= lateStart.getTime());
   }
 });
@@ -284,4 +307,71 @@ test("today view fills easy brightness labels from calculated moon data", () => 
   assert.match(page.element("illuminationBadge").textContent, /밝은 정도 .+ \(밝기\)/);
   assert.match(page.element("moonAgeBadge").textContent, /달의 나이 .+ \(월령\)/);
   assert.ok(["북쪽", "동쪽", "남쪽", "서쪽", ""].includes(page.element("moonriseDirection").textContent));
+});
+
+function findSampleObservationDays(api) {
+  const lat = 36.5;
+  const lon = 127.5;
+  let hardDay = null;
+  let easyDay = null;
+  for (let day = 1; day <= 45; day += 1) {
+    const date = new Date(2026, 8, day, 12, 0, 0);
+    if (api.MoonEngine.isHardObservationDay(date, lat, lon)) {
+      if (!hardDay) hardDay = date;
+    } else if (!easyDay) {
+      easyDay = date;
+    }
+    if (hardDay && easyDay) break;
+  }
+  return { hardDay, easyDay };
+}
+
+test("a day is hard when the moon is only up in daylight or late night", () => {
+  const { api } = loadStudentPage();
+  const { hardDay, easyDay } = findSampleObservationDays(api);
+  assert.ok(hardDay, "expected a hard observation day near September 2026");
+  assert.ok(easyDay, "expected a student-friendly observation day near September 2026");
+  assert.equal(api.MoonEngine.isHardObservationDay(new Date(2026, 8, 9, 12, 0, 0), 36.5, 127.5), true);
+  assert.equal(api.MoonEngine.isHardObservationDay(hardDay, 36.5, 127.5), true);
+  assert.equal(api.MoonEngine.isHardObservationDay(easyDay, 36.5, 127.5), false);
+
+  const windowOnEasy = api.MoonEngine.findNextObservationWindow(
+    new Date(easyDay.getFullYear(), easyDay.getMonth(), easyDay.getDate(), 0, 0, 0),
+    36.5,
+    127.5,
+  );
+  assert.ok(windowOnEasy);
+  assert.equal(windowOnEasy.time.getFullYear(), easyDay.getFullYear());
+  assert.equal(windowOnEasy.time.getMonth(), easyDay.getMonth());
+  assert.equal(windowOnEasy.time.getDate(), easyDay.getDate());
+  assert.equal(api.MoonEngine.isLateNightHour(windowOnEasy.time), false);
+});
+
+test("hard-day cards use a high-contrast warning color", () => {
+  const page = loadStudentPage();
+  const { hardDay, easyDay } = findSampleObservationDays(page.api);
+  assert.ok(hardDay);
+  assert.ok(easyDay);
+
+  page.api.renderSubmitObservationSupport(new Date(hardDay.getFullYear(), hardDay.getMonth(), hardDay.getDate(), 15, 0, 0));
+  assert.equal(page.element("observationGuidanceTitle").textContent, "오늘은 달을 관찰하기 어려운 날이에요");
+  assert.match(page.element("observationGuidanceDetail").textContent, /늦은 밤이나 새벽/);
+  assert.match(page.element("observationGuidanceCard").className, /border-amber-400/);
+  assert.match(page.element("observationGuidanceCard").className, /bg-amber-400\/25/);
+  assert.match(page.element("observationGuidanceTitle").className, /text-amber-100/);
+  assert.equal(page.element("observationGuidanceNext").textContent, "");
+  assert.equal(page.element("observationGuidanceNext").classList.contains("hidden"), true);
+  assert.doesNotMatch(page.element("observationGuidanceDetail").textContent, /오늘은 달을 보기 어려워요/);
+
+  page.api.setSelectedDate(hardDay);
+  page.api.renderToday();
+  assert.equal(page.element("observationTipHeading").textContent, "오늘은 달을 관찰하기 어려운 날이에요");
+  assert.match(page.element("observationTipCard").className, /border-amber-400/);
+  assert.match(page.element("observationTip").textContent, /늦은 밤이나 새벽/);
+
+  page.api.setSelectedDate(easyDay);
+  page.api.renderToday();
+  assert.equal(page.element("observationTipHeading").textContent, "🔭 관찰 도움말");
+  assert.match(page.element("observationTipCard").className, /border-blue-400/);
+  assert.doesNotMatch(page.element("observationTipCard").className, /border-amber-400/);
 });

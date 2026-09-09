@@ -146,8 +146,8 @@
             </article>
           </div>
 
-          <article class="rounded-2xl border border-blue-400/20 bg-blue-400/[.07] p-5">
-            <h3 class="font-black text-blue-200">🔭 관찰 도움말</h3>
+          <article id="observationTipCard" class="rounded-2xl border border-blue-400/20 bg-blue-400/[.07] p-5">
+            <h3 id="observationTipHeading" class="font-black text-blue-200">🔭 관찰 도움말</h3>
             <p id="observationTip" class="mt-2 text-sm leading-6 text-slate-300">달 정보를 계산하고 있어요.</p>
           </article>
           <p id="locationNote" class="px-1 text-[11px] leading-5 text-slate-500">※ 관찰 지역 기준 좌표의 교육용 천문 계산값입니다. 지형과 대기 상태에 따라 실제 관찰 시각은 조금 달라질 수 있습니다.</p>
@@ -234,7 +234,7 @@
               <input id="studentNumber" name="studentNumber" type="number" min="1" max="50" required placeholder="예: 5" class="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white placeholder:text-slate-600">
             </label>
             <label class="block text-sm font-bold">이름
-              <input id="studentName" name="studentName" type="text" maxlength="20" required autocomplete="off" placeholder="예: 김민준" class="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white placeholder:text-slate-600">
+              <input id="studentName" name="studentName" type="text" maxlength="20" required autocomplete="off" placeholder="예: 홍길동" class="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white placeholder:text-slate-600">
             </label>
           </div>
           <label class="block text-sm font-bold">관찰 날짜와 시간
@@ -409,6 +409,34 @@
     let currentObservationLon = DEFAULT_OBSERVATION_LON;
     const OBSERVATION_UNAVAILABLE_LABEL = '관찰 어려움';
     const NO_OBSERVATION_WINDOW_TEXT = '오늘은 달을 보기 어려워요. 다음 날 달 정보를 다시 확인해 보세요.';
+    const HARD_DAY_TITLE = '오늘은 달을 관찰하기 어려운 날이에요';
+    const HARD_DAY_DETAIL = '달이 늦은 밤이나 새벽, 또는 낮에만 하늘에 있어요. 저녁 관찰은 다음 날 달 정보를 다시 확인해 보세요.';
+    const STUDENT_EVENING_START_MINUTES = 17 * 60;
+    const STUDENT_EVENING_END_MINUTES = 1 * 60;
+    const GUIDANCE_CARD_CLASS = {
+      normal: 'mt-4 rounded-2xl border border-blue-400/25 bg-blue-400/[.08] p-4',
+      hard: 'mt-4 rounded-2xl border-2 border-amber-400 bg-amber-400/25 p-4 shadow-moon'
+    };
+    const GUIDANCE_TITLE_CLASS = {
+      normal: 'font-black text-blue-100',
+      hard: 'font-black text-amber-100'
+    };
+    const GUIDANCE_BODY_CLASS = {
+      normal: 'mt-2 text-sm leading-6 text-slate-300',
+      hard: 'mt-2 text-sm leading-6 text-amber-50'
+    };
+    const TIP_CARD_CLASS = {
+      normal: 'rounded-2xl border border-blue-400/20 bg-blue-400/[.07] p-5',
+      hard: 'rounded-2xl border-2 border-amber-400 bg-amber-400/25 p-5 shadow-moon'
+    };
+    const TIP_HEADING_CLASS = {
+      normal: 'font-black text-blue-200',
+      hard: 'font-black text-amber-100'
+    };
+    const TIP_BODY_CLASS = {
+      normal: 'mt-2 text-sm leading-6 text-slate-300',
+      hard: 'mt-2 text-sm leading-6 text-amber-50'
+    };
     const COMPASS_SENSOR_WAIT_MS = 2500;
     let lateNightDialogShownThisLoad = false;
     let lateNightDialogPreviousFocus = null;
@@ -505,6 +533,9 @@
       }
 
       function decideObservationGuidance(input) {
+        if (input.hardDay) {
+          return { kind: 'hard-day', title: '오늘은 달을 관찰하기 어려운 날이에요' };
+        }
         if (input.sunAltitudeDeg > 0) {
           return { kind: 'daylight', title: '햇빛이 밝아 달을 찾기 어려울 수 있어요' };
         }
@@ -517,6 +548,20 @@
         return { kind: 'observable', title: '지금 달을 관찰해 볼 수 있어요' };
       }
 
+      // 초등학생이 실제로 나가 보기 쉬운 저녁 시간(17:00 포함 ~ 01:00 미만)만 인정합니다.
+      function isStudentObservationHour(date) {
+        const minutes = date.getHours() * 60 + date.getMinutes();
+        return minutes >= STUDENT_EVENING_START_MINUTES || minutes < STUDENT_EVENING_END_MINUTES;
+      }
+
+      function studentFriendlyMoon(date, lat, lng) {
+        if (!isStudentObservationHour(date)) return null;
+        const moon = getMoonPosition(date, lat, lng);
+        const sun = getSunPosition(date, lat, lng);
+        if (moon.altitude >= 5 * rad && sun.altitude <= -6 * rad) return moon;
+        return null;
+      }
+
       function findNextMoonrise(now, lat, lng) {
         for (let dayOffset = 0; dayOffset <= 2; dayOffset += 1) {
           const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayOffset, 12);
@@ -527,14 +572,10 @@
       }
 
       function findNextObservationWindow(now, lat, lng) {
-        const moonMin = 5 * rad;
-        const sunMax = -6 * rad;
         for (let offset = 0; offset <= 24 * 60; offset += 10) {
           const date = new Date(now.getTime() + offset * 60000);
-          if (isLateNightHour(date)) continue;
-          const moon = getMoonPosition(date, lat, lng);
-          const sun = getSunPosition(date, lat, lng);
-          if (moon.altitude >= moonMin && sun.altitude <= sunMax) {
+          const moon = studentFriendlyMoon(date, lat, lng);
+          if (moon) {
             return {
               time: date,
               compassDeg: azimuthToCompassDegrees(moon.azimuth)
@@ -542,6 +583,16 @@
           }
         }
         return null;
+      }
+
+      // 그날 저녁(17:00~01:00)에 달이 하늘 높이 있지 않으면 관찰하기 어려운 날입니다.
+      function isHardObservationDay(dayDate, lat, lng) {
+        const start = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate());
+        for (let offset = 0; offset < 24 * 60; offset += 10) {
+          const date = new Date(start.getTime() + offset * 60000);
+          if (studentFriendlyMoon(date, lat, lng)) return false;
+        }
+        return true;
       }
 
       function getMoonIllumination(date) {
@@ -613,9 +664,11 @@
         azimuthToCompassDegrees,
         compassDegreesToCardinal,
         isLateNightHour,
+        isStudentObservationHour,
         decideObservationGuidance,
         findNextMoonrise,
-        findNextObservationWindow
+        findNextObservationWindow,
+        isHardObservationDay
       };
     })();
 
@@ -1085,6 +1138,37 @@
       return radians * 180 / Math.PI;
     }
 
+    function applyClassName(el, className) {
+      if (!el) return;
+      const hidden = el.classList && el.classList.contains('hidden');
+      el.className = className;
+      if (hidden) el.classList.add('hidden');
+    }
+
+    function applyGuidanceCardTone(kind) {
+      const hard = kind === 'hard-day';
+      const card = document.getElementById('observationGuidanceCard');
+      const title = document.getElementById('observationGuidanceTitle');
+      const detail = document.getElementById('observationGuidanceDetail');
+      const next = document.getElementById('observationGuidanceNext');
+      if (card) card.className = hard ? GUIDANCE_CARD_CLASS.hard : GUIDANCE_CARD_CLASS.normal;
+      if (title) title.className = hard ? GUIDANCE_TITLE_CLASS.hard : GUIDANCE_TITLE_CLASS.normal;
+      applyClassName(detail, hard ? GUIDANCE_BODY_CLASS.hard : GUIDANCE_BODY_CLASS.normal);
+      applyClassName(next, hard ? GUIDANCE_BODY_CLASS.hard : GUIDANCE_BODY_CLASS.normal);
+    }
+
+    function applyTodayTipTone(hard) {
+      const card = document.getElementById('observationTipCard');
+      const heading = document.getElementById('observationTipHeading');
+      const tip = document.getElementById('observationTip');
+      if (card) card.className = hard ? TIP_CARD_CLASS.hard : TIP_CARD_CLASS.normal;
+      if (heading) {
+        heading.className = hard ? TIP_HEADING_CLASS.hard : TIP_HEADING_CLASS.normal;
+        heading.textContent = hard ? HARD_DAY_TITLE : '🔭 관찰 도움말';
+      }
+      if (tip) tip.className = hard ? TIP_BODY_CLASS.hard : TIP_BODY_CLASS.normal;
+    }
+
     function renderSubmitObservationSupport(now = new Date()) {
       const noon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
       const times = MoonEngine.getMoonTimes(noon, currentObservationLat, currentObservationLon);
@@ -1101,12 +1185,24 @@
       const moon = MoonEngine.getMoonPosition(now, currentObservationLat, currentObservationLon);
       const sun = MoonEngine.getSunPosition(now, currentObservationLat, currentObservationLon);
       const illumination = MoonEngine.getMoonIllumination(now);
+      const hardDay = MoonEngine.isHardObservationDay(now, currentObservationLat, currentObservationLon);
       const guidance = MoonEngine.decideObservationGuidance({
         sunAltitudeDeg: toAltitudeDeg(sun.altitude),
         moonAltitudeDeg: toAltitudeDeg(moon.altitude),
-        illuminationFraction: illumination.fraction
+        illuminationFraction: illumination.fraction,
+        hardDay
       });
+      applyGuidanceCardTone(guidance.kind);
       setElementText('observationGuidanceTitle', guidance.title);
+
+      // 어려운 날은 제목+이유 한 줄만 보여 주고, '다음 날 다시 확인' 문구를 두 번 쓰지 않습니다.
+      if (guidance.kind === 'hard-day') {
+        setElementText('observationGuidanceDetail', HARD_DAY_DETAIL);
+        setElementText('observationGuidanceNext', '');
+        toggleHidden('observationGuidanceDetail', false);
+        toggleHidden('observationGuidanceNext', true);
+        return;
+      }
 
       let detail = '';
       if (guidance.kind === 'moon-below') {
@@ -1143,6 +1239,7 @@
       const transit = getTransit(noon);
       const [name, description] = phaseInfo(illumination.phase);
       const dateLabel = new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }).format(noon);
+      const hardDay = MoonEngine.isHardObservationDay(selectedDate, currentObservationLat, currentObservationLon);
 
       document.getElementById('selectedDateLabel').textContent = dateLabel;
       document.getElementById('moonPhaseSVG').innerHTML = moonSvg(illumination.phase);
@@ -1158,7 +1255,10 @@
         setTime: 'moonsetTime',
         setDirection: 'moonsetDirection'
       });
-      document.getElementById('observationTip').textContent = observationTip(illumination.phase, times);
+      applyTodayTipTone(hardDay);
+      document.getElementById('observationTip').textContent = hardDay
+        ? HARD_DAY_DETAIL
+        : observationTip(illumination.phase, times);
     }
 
     function observationTip(phase, times) {
