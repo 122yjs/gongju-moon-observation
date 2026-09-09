@@ -116,8 +116,8 @@
           <h3 id="moonPhaseName" class="mt-4 text-2xl font-black text-amber-300">--</h3>
           <p id="moonPhaseDesc" class="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-300">--</p>
           <div class="mt-5 flex justify-center gap-2 text-xs font-bold">
-            <span id="illuminationBadge" class="rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1.5 text-amber-200">밝기 --%</span>
-            <span id="moonAgeBadge" class="rounded-full border border-blue-400/25 bg-blue-400/10 px-3 py-1.5 text-blue-200">월령 --일</span>
+            <span id="illuminationBadge" class="rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1.5 text-amber-200">밝은 정도 --% (밝기)</span>
+            <span id="moonAgeBadge" class="rounded-full border border-blue-400/25 bg-blue-400/10 px-3 py-1.5 text-blue-200">달의 나이 --일 (월령)</span>
           </div>
         </article>
 
@@ -125,26 +125,29 @@
           <div class="grid gap-3 sm:grid-cols-3">
             <article class="rounded-2xl border border-space-700 bg-space-800/85 p-5 shadow-card">
               <div class="text-2xl" aria-hidden="true">🌄</div>
-              <p class="mt-3 text-xs font-bold text-slate-400">월출시간</p>
+              <p class="mt-3 text-sm font-black text-white">달이 뜨는 때</p>
+              <p class="mt-1 text-xs font-bold text-slate-400">월출</p>
               <p id="moonriseTime" class="mt-1 text-2xl font-black">--:--</p>
-              <p class="mt-1 text-xs text-amber-300">동쪽 하늘에서 떠요</p>
+              <p id="moonriseDirection" class="mt-1 text-xs text-amber-300"></p>
             </article>
             <article class="rounded-2xl border border-amber-400/25 bg-amber-400/[.07] p-5 shadow-card">
               <div class="text-2xl" aria-hidden="true">🌙</div>
-              <p class="mt-3 text-xs font-bold text-amber-200/80">월남중시간</p>
+              <p class="mt-3 text-sm font-black text-amber-100">가장 높을 때</p>
+              <p class="mt-1 text-xs font-bold text-amber-200/80">남중</p>
               <p id="moonTransitTime" class="mt-1 text-2xl font-black text-amber-300">--:--</p>
-              <p id="moonTransitAlt" class="mt-1 text-xs text-amber-200">가장 높이 뜨는 때</p>
+              <p id="moonTransitAlt" class="mt-1 text-xs text-amber-200"></p>
             </article>
             <article class="rounded-2xl border border-space-700 bg-space-800/85 p-5 shadow-card">
               <div class="text-2xl" aria-hidden="true">🌆</div>
-              <p class="mt-3 text-xs font-bold text-slate-400">월몰시간</p>
+              <p class="mt-3 text-sm font-black text-white">달이 지는 때</p>
+              <p class="mt-1 text-xs font-bold text-slate-400">월몰</p>
               <p id="moonsetTime" class="mt-1 text-2xl font-black">--:--</p>
-              <p class="mt-1 text-xs text-indigo-300">서쪽 하늘로 져요</p>
+              <p id="moonsetDirection" class="mt-1 text-xs text-indigo-300"></p>
             </article>
           </div>
 
-          <article class="rounded-2xl border border-blue-400/20 bg-blue-400/[.07] p-5">
-            <h3 class="font-black text-blue-200">🔭 관찰 도움말</h3>
+          <article id="observationTipCard" class="rounded-2xl border border-blue-400/20 bg-blue-400/[.07] p-5">
+            <h3 id="observationTipHeading" class="font-black text-blue-200">🔭 관찰 도움말</h3>
             <p id="observationTip" class="mt-2 text-sm leading-6 text-slate-300">달 정보를 계산하고 있어요.</p>
           </article>
           <p id="locationNote" class="px-1 text-[11px] leading-5 text-slate-500">※ 관찰 지역 기준 좌표의 교육용 천문 계산값입니다. 지형과 대기 상태에 따라 실제 관찰 시각은 조금 달라질 수 있습니다.</p>
@@ -180,8 +183,49 @@
       <div class="mx-auto max-w-2xl rounded-3xl border border-space-700 bg-space-800/90 p-5 sm:p-7 shadow-card">
         <p class="text-xs font-bold text-amber-300">나의 관찰 기록 남기기</p>
         <h2 id="submitHeading" class="mt-1 text-2xl font-black">달 사진 제출</h2>
+        <article id="observationGuidanceCard" class="mt-4 rounded-2xl border border-blue-400/25 bg-blue-400/[.08] p-4" aria-live="polite">
+          <h3 id="observationGuidanceTitle" class="font-black text-blue-100">달 관찰 안내를 준비하고 있어요</h3>
+          <p id="observationGuidanceDetail" class="mt-2 hidden text-sm leading-6 text-slate-300"></p>
+          <p id="observationGuidanceNext" class="mt-2 hidden text-sm leading-6 text-slate-300"></p>
+        </article>
         <div class="mt-4 rounded-2xl border border-amber-400/20 bg-amber-400/[.07] p-4 text-sm text-amber-100">
           <strong id="submitClassLabel">우리 반</strong> 학생용 제출함입니다. 사진은 수업용 비공개 저장소에 안전하게 보관됩니다.
+        </div>
+        <div class="mt-4 grid gap-3 sm:grid-cols-3">
+          <article class="rounded-2xl border border-space-700 bg-space-900/70 p-4">
+            <p class="text-sm font-black text-white">달이 뜨는 때</p>
+            <p class="mt-1 text-xs font-bold text-slate-400">월출</p>
+            <p id="submitMoonriseTime" class="mt-1 text-xl font-black">--:--</p>
+            <p id="submitMoonriseDirection" class="mt-1 text-xs text-amber-300"></p>
+          </article>
+          <article class="rounded-2xl border border-amber-400/25 bg-amber-400/[.07] p-4">
+            <p class="text-sm font-black text-amber-100">가장 높을 때</p>
+            <p class="mt-1 text-xs font-bold text-amber-200/80">남중</p>
+            <p id="submitMoonTransitTime" class="mt-1 text-xl font-black text-amber-300">--:--</p>
+            <p id="submitMoonTransitAlt" class="mt-1 text-xs text-amber-200"></p>
+          </article>
+          <article class="rounded-2xl border border-space-700 bg-space-900/70 p-4">
+            <p class="text-sm font-black text-white">달이 지는 때</p>
+            <p class="mt-1 text-xs font-bold text-slate-400">월몰</p>
+            <p id="submitMoonsetTime" class="mt-1 text-xl font-black">--:--</p>
+            <p id="submitMoonsetDirection" class="mt-1 text-xs text-indigo-300"></p>
+          </article>
+        </div>
+        <div class="mt-4">
+          <button type="button" id="openCompassButton" onclick="openCompass()" aria-expanded="false" aria-controls="compassPanel" class="min-h-11 w-full rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-3 font-black text-amber-100 hover:border-amber-300">나침반 열기</button>
+          <div id="compassPanel" class="mt-3 hidden rounded-2xl border border-space-600 bg-space-900/80 p-4">
+            <p id="compassTargetLabel" class="text-center text-sm font-black text-amber-200">달 방향</p>
+            <svg viewBox="0 0 100 100" class="mx-auto mt-3 h-36 w-36" role="img" aria-label="달 방향 나침반">
+              <circle cx="50" cy="50" r="46" fill="#0b0e17" stroke="#f59e0b" stroke-width="2"></circle>
+              <text x="50" y="18" text-anchor="middle" fill="#94a3b8" font-size="8">앞</text>
+              <g id="compassArrow">
+                <polygon points="50,16 61,72 50,60 39,72" fill="#fbbf24"></polygon>
+              </g>
+            </svg>
+            <p id="compassStaticDirection" class="mt-2 text-center text-lg font-black text-white"></p>
+            <p class="mt-2 text-center text-xs leading-5 text-slate-500">기기 센서에 따라 방향이 조금 다를 수 있어요</p>
+            <p id="compassStatus" class="mt-2 hidden text-center text-sm font-bold text-amber-100" role="status"></p>
+          </div>
         </div>
 
         <form id="observationForm" class="mt-6 space-y-5" onsubmit="submitObservation(event)">
@@ -190,7 +234,7 @@
               <input id="studentNumber" name="studentNumber" type="number" min="1" max="50" required placeholder="예: 5" class="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white placeholder:text-slate-600">
             </label>
             <label class="block text-sm font-bold">이름
-              <input id="studentName" name="studentName" type="text" maxlength="20" required autocomplete="off" placeholder="예: 김민준" class="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white placeholder:text-slate-600">
+              <input id="studentName" name="studentName" type="text" maxlength="20" required autocomplete="off" placeholder="예: 홍길동" class="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white placeholder:text-slate-600">
             </label>
           </div>
           <label class="block text-sm font-bold">관찰 날짜와 시간
@@ -299,6 +343,17 @@
     </figure>
   </div>
 
+  <div id="lateNightDialog" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 p-4 backdrop-blur" role="dialog" aria-modal="true" aria-labelledby="lateNightDialogTitle" aria-describedby="lateNightDialogBody">
+    <div class="w-full max-w-md rounded-3xl border border-amber-400/30 bg-space-800 p-6 shadow-card">
+      <h3 id="lateNightDialogTitle" class="text-xl font-black text-amber-200">지금은 너무 늦었어요</h3>
+      <p id="lateNightDialogBody" class="mt-3 text-sm leading-6 text-slate-300">오늘은 푹 쉬고, 내일 달을 관찰해요.</p>
+      <div class="mt-6 grid gap-3">
+        <button type="button" id="lateNightRestButton" onclick="restFromLateNight()" class="min-h-12 rounded-xl bg-amber-500 px-4 py-3 font-black text-space-950 hover:bg-amber-400">오늘은 쉬기</button>
+        <button type="button" id="lateNightStayButton" onclick="stayFromLateNight()" class="min-h-12 rounded-xl border border-space-600 bg-space-900 px-4 py-3 font-bold text-slate-200 hover:border-space-500">이미 찍은 사진 올리기</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="fixed bottom-5 left-1/2 z-50 hidden -translate-x-1/2 rounded-xl bg-slate-100 px-5 py-3 text-sm font-black text-slate-950 shadow-2xl" role="status" aria-live="polite"></div>
 
   <script>
@@ -352,6 +407,47 @@
     let currentRegionShortLabel = DEFAULT_REGION_SHORT_LABEL;
     let currentObservationLat = DEFAULT_OBSERVATION_LAT;
     let currentObservationLon = DEFAULT_OBSERVATION_LON;
+    const OBSERVATION_UNAVAILABLE_LABEL = '관찰 어려움';
+    const NO_OBSERVATION_WINDOW_TEXT = '오늘은 달을 보기 어려워요. 다음 날 달 정보를 다시 확인해 보세요.';
+    const HARD_DAY_TITLE = '오늘은 달을 관찰하기 어려운 날이에요';
+    const HARD_DAY_DETAIL = '달이 늦은 밤이나 새벽, 또는 낮에만 하늘에 있어요. 저녁 관찰은 다음 날 달 정보를 다시 확인해 보세요.';
+    const STUDENT_EVENING_START_MINUTES = 17 * 60;
+    const STUDENT_EVENING_END_MINUTES = 1 * 60;
+    const GUIDANCE_CARD_CLASS = {
+      normal: 'mt-4 rounded-2xl border border-blue-400/25 bg-blue-400/[.08] p-4',
+      hard: 'mt-4 rounded-2xl border-2 border-amber-400 bg-amber-400/25 p-4 shadow-moon'
+    };
+    const GUIDANCE_TITLE_CLASS = {
+      normal: 'font-black text-blue-100',
+      hard: 'font-black text-amber-100'
+    };
+    const GUIDANCE_BODY_CLASS = {
+      normal: 'mt-2 text-sm leading-6 text-slate-300',
+      hard: 'mt-2 text-sm leading-6 text-amber-50'
+    };
+    const TIP_CARD_CLASS = {
+      normal: 'rounded-2xl border border-blue-400/20 bg-blue-400/[.07] p-5',
+      hard: 'rounded-2xl border-2 border-amber-400 bg-amber-400/25 p-5 shadow-moon'
+    };
+    const TIP_HEADING_CLASS = {
+      normal: 'font-black text-blue-200',
+      hard: 'font-black text-amber-100'
+    };
+    const TIP_BODY_CLASS = {
+      normal: 'mt-2 text-sm leading-6 text-slate-300',
+      hard: 'mt-2 text-sm leading-6 text-amber-50'
+    };
+    const COMPASS_SENSOR_WAIT_MS = 2500;
+    let lateNightDialogShownThisLoad = false;
+    let lateNightDialogPreviousFocus = null;
+    let compassPanelOpen = false;
+    let orientationHandler = null;
+    let orientationEventName = '';
+    let orientationUseCapture = false;
+    let compassSensorTimer = null;
+    let orientationEventCount = 0;
+    let usableHeadingCount = 0;
+    let compassTargetDeg = null;
 
     const MoonEngine = (() => {
       const PI = Math.PI;
@@ -406,6 +502,97 @@
         let h = altitude(H, phi, c.dec);
         h += astroRefraction(h);
         return { azimuth: azimuth(H, phi, c.dec), altitude: h, distance: c.dist };
+      }
+
+      function getSunPosition(date, lat, lng) {
+        const lw = rad * -lng;
+        const phi = rad * lat;
+        const d = toDays(date);
+        const c = sunCoords(d);
+        const H = siderealTime(d, lw) - c.ra;
+        return { azimuth: azimuth(H, phi, c.dec), altitude: altitude(H, phi, c.dec) };
+      }
+
+      // SunCalc 방위각은 남쪽을 0으로 두므로, 북쪽을 0으로 바꿔 나침반 각도로 만듭니다.
+      function azimuthToCompassDegrees(azimuthRadians) {
+        return (((azimuthRadians * 180 / PI) + 180) % 360 + 360) % 360;
+      }
+
+      function compassDegreesToCardinal(degrees) {
+        const normalized = ((degrees % 360) + 360) % 360;
+        if (normalized >= 315 || normalized < 45) return '북쪽';
+        if (normalized < 135) return '동쪽';
+        if (normalized < 225) return '남쪽';
+        return '서쪽';
+      }
+
+      // 01:00부터 표시하고, 05:00부터는 표시하지 않습니다.
+      function isLateNightHour(date) {
+        const minutes = date.getHours() * 60 + date.getMinutes();
+        return minutes >= 60 && minutes < 300;
+      }
+
+      function decideObservationGuidance(input) {
+        if (input.hardDay) {
+          return { kind: 'hard-day', title: '오늘은 달을 관찰하기 어려운 날이에요' };
+        }
+        if (input.sunAltitudeDeg > 0) {
+          return { kind: 'daylight', title: '햇빛이 밝아 달을 찾기 어려울 수 있어요' };
+        }
+        if (input.moonAltitudeDeg < 0) {
+          return { kind: 'moon-below', title: '지금은 달이 하늘 아래쪽에 있어요' };
+        }
+        if (input.illuminationFraction < 0.05) {
+          return { kind: 'too-dark', title: '오늘은 하늘에서 달을 보기 어려워요' };
+        }
+        return { kind: 'observable', title: '지금 달을 관찰해 볼 수 있어요' };
+      }
+
+      // 초등학생이 실제로 나가 보기 쉬운 저녁 시간(17:00 포함 ~ 01:00 미만)만 인정합니다.
+      function isStudentObservationHour(date) {
+        const minutes = date.getHours() * 60 + date.getMinutes();
+        return minutes >= STUDENT_EVENING_START_MINUTES || minutes < STUDENT_EVENING_END_MINUTES;
+      }
+
+      function studentFriendlyMoon(date, lat, lng) {
+        if (!isStudentObservationHour(date)) return null;
+        const moon = getMoonPosition(date, lat, lng);
+        const sun = getSunPosition(date, lat, lng);
+        if (moon.altitude >= 5 * rad && sun.altitude <= -6 * rad) return moon;
+        return null;
+      }
+
+      function findNextMoonrise(now, lat, lng) {
+        for (let dayOffset = 0; dayOffset <= 2; dayOffset += 1) {
+          const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayOffset, 12);
+          const times = getMoonTimes(day, lat, lng);
+          if (times.rise && times.rise.getTime() > now.getTime()) return times.rise;
+        }
+        return null;
+      }
+
+      function findNextObservationWindow(now, lat, lng) {
+        for (let offset = 0; offset <= 24 * 60; offset += 10) {
+          const date = new Date(now.getTime() + offset * 60000);
+          const moon = studentFriendlyMoon(date, lat, lng);
+          if (moon) {
+            return {
+              time: date,
+              compassDeg: azimuthToCompassDegrees(moon.azimuth)
+            };
+          }
+        }
+        return null;
+      }
+
+      // 그날 저녁(17:00~01:00)에 달이 하늘 높이 있지 않으면 관찰하기 어려운 날입니다.
+      function isHardObservationDay(dayDate, lat, lng) {
+        const start = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate());
+        for (let offset = 0; offset < 24 * 60; offset += 10) {
+          const date = new Date(start.getTime() + offset * 60000);
+          if (studentFriendlyMoon(date, lat, lng)) return false;
+        }
+        return true;
       }
 
       function getMoonIllumination(date) {
@@ -469,7 +656,20 @@
         return result;
       }
 
-      return { getMoonPosition, getMoonIllumination, getMoonTimes };
+      return {
+        getMoonPosition,
+        getMoonIllumination,
+        getMoonTimes,
+        getSunPosition,
+        azimuthToCompassDegrees,
+        compassDegreesToCardinal,
+        isLateNightHour,
+        isStudentObservationHour,
+        decideObservationGuidance,
+        findNextMoonrise,
+        findNextObservationWindow,
+        isHardObservationDay
+      };
     })();
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -479,12 +679,20 @@
       renderCalendar();
       initObservationDraft();
       checkSession();
-      window.addEventListener('pagehide', stopCamera);
+      window.addEventListener('pagehide', () => {
+        stopCamera();
+        stopOrientationListening();
+      });
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
+          if (isLateNightDialogOpen()) {
+            stayFromLateNight();
+            return;
+          }
           closeLightbox(event, true);
           stopCamera();
         }
+        trapLateNightFocus(event);
       });
     });
 
@@ -504,8 +712,13 @@
       form.addEventListener('click', () => saveObservationDraft());
       window.addEventListener('pagehide', () => saveObservationDraft());
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') saveObservationDraft();
-        else retrySessionCheck();
+        if (document.visibilityState === 'hidden') {
+          saveObservationDraft();
+          stopOrientationListening();
+        } else {
+          retrySessionCheck();
+          if (compassPanelOpen) startOrientationListening();
+        }
       });
       window.addEventListener('pageshow', retrySessionCheck);
       window.addEventListener('focus', retrySessionCheck);
@@ -750,7 +963,10 @@
         showToast('선생님이 안내한 수업 QR로 먼저 입장해 주세요.');
         return;
       }
-      if (name !== 'submit') stopCamera();
+      if (name !== 'submit') {
+        stopCamera();
+        closeCompass();
+      }
       document.querySelectorAll('.view-panel').forEach((panel) => panel.classList.add('hidden'));
       document.getElementById(`view-${name}`).classList.remove('hidden');
       document.querySelectorAll('.nav-button').forEach((button) => {
@@ -761,6 +977,10 @@
         button.setAttribute('aria-selected', String(active));
       });
       if (name === 'month') renderCalendar();
+      if (name === 'submit') {
+        renderSubmitObservationSupport();
+        maybeShowLateNightDialog();
+      }
       if (name === 'gallery' && !galleryLoaded) refreshGallery();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -866,6 +1086,152 @@
       return `${dark}<path d="${path}" fill="#fbbf24"/><circle cx="50" cy="50" r="${radius}" fill="none" stroke="#f59e0b" stroke-width="1.5"/>`;
     }
 
+    function setElementText(id, text) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    }
+
+    function toggleHidden(id, hidden) {
+      const el = document.getElementById(id);
+      if (!el || !el.classList) return;
+      el.classList.toggle('hidden', hidden);
+    }
+
+    function describeMoonEvent(time) {
+      if (!time || Number.isNaN(time.getTime())) {
+        return { timeLabel: OBSERVATION_UNAVAILABLE_LABEL, direction: '' };
+      }
+      const position = MoonEngine.getMoonPosition(time, currentObservationLat, currentObservationLon);
+      return {
+        timeLabel: formatTime(time),
+        direction: MoonEngine.compassDegreesToCardinal(MoonEngine.azimuthToCompassDegrees(position.azimuth))
+      };
+    }
+
+    function fillMoonEventFields(times, transit, ids) {
+      const rise = describeMoonEvent(times.rise);
+      const set = describeMoonEvent(times.set);
+      const mid = describeMoonEvent(transit.time);
+      setElementText(ids.riseTime, rise.timeLabel);
+      setElementText(ids.riseDirection, rise.direction);
+      setElementText(ids.setTime, set.timeLabel);
+      setElementText(ids.setDirection, set.direction);
+      setElementText(ids.transitTime, mid.timeLabel);
+      let transitDirection = OBSERVATION_UNAVAILABLE_LABEL;
+      if (mid.direction && transit.altitude > 0) {
+        transitDirection = `${mid.direction} · 약 ${Math.round(transit.altitude)}° 높이`;
+      } else if (mid.direction) {
+        transitDirection = `${mid.direction} · 이날은 지평선 아래에서 남중해요`;
+      }
+      setElementText(ids.transitDirection, transitDirection);
+    }
+
+    function formatStudentDateTime(date) {
+      const now = new Date();
+      const sameDay = now.getFullYear() === date.getFullYear() && now.getMonth() === date.getMonth() && now.getDate() === date.getDate();
+      const time = formatTime(date);
+      if (sameDay) return time;
+      return `${date.getMonth() + 1}월 ${date.getDate()}일 ${time}`;
+    }
+
+    function toAltitudeDeg(radians) {
+      return radians * 180 / Math.PI;
+    }
+
+    function applyClassName(el, className) {
+      if (!el) return;
+      const hidden = el.classList && el.classList.contains('hidden');
+      el.className = className;
+      if (hidden) el.classList.add('hidden');
+    }
+
+    function applyGuidanceCardTone(kind) {
+      const hard = kind === 'hard-day';
+      const card = document.getElementById('observationGuidanceCard');
+      const title = document.getElementById('observationGuidanceTitle');
+      const detail = document.getElementById('observationGuidanceDetail');
+      const next = document.getElementById('observationGuidanceNext');
+      if (card) card.className = hard ? GUIDANCE_CARD_CLASS.hard : GUIDANCE_CARD_CLASS.normal;
+      if (title) title.className = hard ? GUIDANCE_TITLE_CLASS.hard : GUIDANCE_TITLE_CLASS.normal;
+      applyClassName(detail, hard ? GUIDANCE_BODY_CLASS.hard : GUIDANCE_BODY_CLASS.normal);
+      applyClassName(next, hard ? GUIDANCE_BODY_CLASS.hard : GUIDANCE_BODY_CLASS.normal);
+    }
+
+    function applyTodayTipTone(hard) {
+      const card = document.getElementById('observationTipCard');
+      const heading = document.getElementById('observationTipHeading');
+      const tip = document.getElementById('observationTip');
+      if (card) card.className = hard ? TIP_CARD_CLASS.hard : TIP_CARD_CLASS.normal;
+      if (heading) {
+        heading.className = hard ? TIP_HEADING_CLASS.hard : TIP_HEADING_CLASS.normal;
+        heading.textContent = hard ? HARD_DAY_TITLE : '🔭 관찰 도움말';
+      }
+      if (tip) tip.className = hard ? TIP_BODY_CLASS.hard : TIP_BODY_CLASS.normal;
+    }
+
+    function renderSubmitObservationSupport(now = new Date()) {
+      const noon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
+      const times = MoonEngine.getMoonTimes(noon, currentObservationLat, currentObservationLon);
+      const transit = getTransit(noon);
+      fillMoonEventFields(times, transit, {
+        riseTime: 'submitMoonriseTime',
+        riseDirection: 'submitMoonriseDirection',
+        transitTime: 'submitMoonTransitTime',
+        transitDirection: 'submitMoonTransitAlt',
+        setTime: 'submitMoonsetTime',
+        setDirection: 'submitMoonsetDirection'
+      });
+
+      const moon = MoonEngine.getMoonPosition(now, currentObservationLat, currentObservationLon);
+      const sun = MoonEngine.getSunPosition(now, currentObservationLat, currentObservationLon);
+      const illumination = MoonEngine.getMoonIllumination(now);
+      const hardDay = MoonEngine.isHardObservationDay(now, currentObservationLat, currentObservationLon);
+      const guidance = MoonEngine.decideObservationGuidance({
+        sunAltitudeDeg: toAltitudeDeg(sun.altitude),
+        moonAltitudeDeg: toAltitudeDeg(moon.altitude),
+        illuminationFraction: illumination.fraction,
+        hardDay
+      });
+      applyGuidanceCardTone(guidance.kind);
+      setElementText('observationGuidanceTitle', guidance.title);
+
+      // 어려운 날은 제목+이유 한 줄만 보여 주고, '다음 날 다시 확인' 문구를 두 번 쓰지 않습니다.
+      if (guidance.kind === 'hard-day') {
+        setElementText('observationGuidanceDetail', HARD_DAY_DETAIL);
+        setElementText('observationGuidanceNext', '');
+        toggleHidden('observationGuidanceDetail', false);
+        toggleHidden('observationGuidanceNext', true);
+        return;
+      }
+
+      let detail = '';
+      if (guidance.kind === 'moon-below') {
+        const nextRise = MoonEngine.findNextMoonrise(now, currentObservationLat, currentObservationLon);
+        if (nextRise) {
+          const risePos = MoonEngine.getMoonPosition(nextRise, currentObservationLat, currentObservationLon);
+          const riseDir = MoonEngine.compassDegreesToCardinal(MoonEngine.azimuthToCompassDegrees(risePos.azimuth));
+          detail = `다음 달이 뜨는 때는 ${formatStudentDateTime(nextRise)}이고, ${riseDir}을 바라보면 좋아요.`;
+        } else {
+          detail = '다음 달이 뜨는 시각은 지금은 계산하기 어려워요.';
+        }
+      } else if (guidance.kind === 'observable') {
+        const moonDir = MoonEngine.compassDegreesToCardinal(MoonEngine.azimuthToCompassDegrees(moon.azimuth));
+        detail = `지금은 ${moonDir}을 바라보면 달을 찾기 쉬워요.`;
+      }
+
+      const nextWindow = MoonEngine.findNextObservationWindow(now, currentObservationLat, currentObservationLon);
+      const nextText = guidance.kind === 'observable'
+        ? ''
+        : nextWindow
+          ? `다음으로 관찰하기 좋은 때는 ${formatStudentDateTime(nextWindow.time)}예요. ${MoonEngine.compassDegreesToCardinal(nextWindow.compassDeg)}을 바라보면 좋아요.`
+          : NO_OBSERVATION_WINDOW_TEXT;
+
+      setElementText('observationGuidanceDetail', detail);
+      setElementText('observationGuidanceNext', nextText);
+      toggleHidden('observationGuidanceDetail', !detail);
+      toggleHidden('observationGuidanceNext', !nextText);
+    }
+
     function renderToday() {
       const noon = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 12);
       const illumination = MoonEngine.getMoonIllumination(noon);
@@ -873,20 +1239,26 @@
       const transit = getTransit(noon);
       const [name, description] = phaseInfo(illumination.phase);
       const dateLabel = new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }).format(noon);
+      const hardDay = MoonEngine.isHardObservationDay(selectedDate, currentObservationLat, currentObservationLon);
 
       document.getElementById('selectedDateLabel').textContent = dateLabel;
       document.getElementById('moonPhaseSVG').innerHTML = moonSvg(illumination.phase);
       document.getElementById('moonPhaseName').textContent = name;
       document.getElementById('moonPhaseDesc').textContent = description;
-      document.getElementById('illuminationBadge').textContent = `밝기 ${Math.round(illumination.fraction * 100)}%`;
-      document.getElementById('moonAgeBadge').textContent = `월령 ${(illumination.phase * 29.5306).toFixed(1)}일`;
-      document.getElementById('moonriseTime').textContent = formatTime(times.rise);
-      document.getElementById('moonsetTime').textContent = formatTime(times.set);
-      document.getElementById('moonTransitTime').textContent = formatTime(transit.time);
-      document.getElementById('moonTransitAlt').textContent = transit.altitude > 0
-        ? `남쪽 하늘 약 ${Math.round(transit.altitude)}° 높이`
-        : '이날은 지평선 아래에서 남중해요';
-      document.getElementById('observationTip').textContent = observationTip(illumination.phase, times);
+      document.getElementById('illuminationBadge').textContent = `밝은 정도 ${Math.round(illumination.fraction * 100)}% (밝기)`;
+      document.getElementById('moonAgeBadge').textContent = `달의 나이 ${(illumination.phase * 29.5306).toFixed(1)}일 (월령)`;
+      fillMoonEventFields(times, transit, {
+        riseTime: 'moonriseTime',
+        riseDirection: 'moonriseDirection',
+        transitTime: 'moonTransitTime',
+        transitDirection: 'moonTransitAlt',
+        setTime: 'moonsetTime',
+        setDirection: 'moonsetDirection'
+      });
+      applyTodayTipTone(hardDay);
+      document.getElementById('observationTip').textContent = hardDay
+        ? HARD_DAY_DETAIL
+        : observationTip(illumination.phase, times);
     }
 
     function observationTip(phase, times) {
@@ -1481,6 +1853,252 @@
       toast.classList.remove('hidden');
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => toast.classList.add('hidden'), 3200);
+    }
+
+    function setBodyScrollLocked(locked) {
+      if (!document.body || !document.body.classList) return;
+      document.body.classList.toggle('overflow-hidden', locked);
+    }
+
+    function isLateNightDialogOpen() {
+      const dialog = document.getElementById('lateNightDialog');
+      if (!dialog || !dialog.classList || typeof dialog.classList.contains !== 'function') return false;
+      return !dialog.classList.contains('hidden');
+    }
+
+    function maybeShowLateNightDialog(now = new Date()) {
+      if (lateNightDialogShownThisLoad) return false;
+      if (!MoonEngine.isLateNightHour(now)) return false;
+      lateNightDialogShownThisLoad = true;
+      const dialog = document.getElementById('lateNightDialog');
+      if (!dialog || !dialog.classList) return true;
+      lateNightDialogPreviousFocus = document.activeElement || null;
+      dialog.classList.remove('hidden');
+      dialog.classList.add('flex');
+      setBodyScrollLocked(true);
+      const rest = document.getElementById('lateNightRestButton');
+      if (rest && typeof rest.focus === 'function') rest.focus();
+      return true;
+    }
+
+    function closeLateNightDialog() {
+      const dialog = document.getElementById('lateNightDialog');
+      if (dialog && dialog.classList) {
+        dialog.classList.add('hidden');
+        dialog.classList.remove('flex');
+      }
+      setBodyScrollLocked(false);
+      if (lateNightDialogPreviousFocus && typeof lateNightDialogPreviousFocus.focus === 'function') {
+        lateNightDialogPreviousFocus.focus();
+      }
+      lateNightDialogPreviousFocus = null;
+    }
+
+    function restFromLateNight() {
+      closeLateNightDialog();
+      showView('today');
+    }
+
+    function stayFromLateNight() {
+      closeLateNightDialog();
+    }
+
+    function trapLateNightFocus(event) {
+      if (!isLateNightDialogOpen() || event.key !== 'Tab') return;
+      const rest = document.getElementById('lateNightRestButton');
+      const stay = document.getElementById('lateNightStayButton');
+      if (!rest || !stay) return;
+      if (event.shiftKey && document.activeElement === rest) {
+        event.preventDefault();
+        stay.focus();
+      } else if (!event.shiftKey && document.activeElement === stay) {
+        event.preventDefault();
+        rest.focus();
+      }
+    }
+
+    function normalizeDegrees(value) {
+      return ((value % 360) + 360) % 360;
+    }
+
+    function shortestDegDelta(target, heading) {
+      let delta = (target - heading) % 360;
+      if (delta > 180) delta -= 360;
+      if (delta < -180) delta += 360;
+      return delta;
+    }
+
+    function screenOrientationAngle() {
+      if (typeof window === 'undefined') return 0;
+      if (window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number') {
+        return window.screen.orientation.angle;
+      }
+      if (typeof window.orientation === 'number') return window.orientation;
+      return 0;
+    }
+
+    function compassHeadingFromEuler(alpha, beta, gamma) {
+      const safeBeta = typeof beta === 'number' ? beta : 0;
+      const safeGamma = typeof gamma === 'number' ? gamma : 0;
+      if (Math.abs(safeBeta) < 1 && Math.abs(safeGamma) < 1) {
+        return normalizeDegrees(360 - alpha);
+      }
+      const toRad = Math.PI / 180;
+      const x = safeBeta * toRad;
+      const y = safeGamma * toRad;
+      const z = alpha * toRad;
+      const cX = Math.cos(x);
+      const cY = Math.cos(y);
+      const cZ = Math.cos(z);
+      const sX = Math.sin(x);
+      const sY = Math.sin(y);
+      const sZ = Math.sin(z);
+      const vx = -cZ * sY - sZ * sX * cY;
+      const vy = -sZ * sY + cZ * sX * cY;
+      let heading = Math.atan2(vx, vy);
+      if (heading < 0) heading += 2 * Math.PI;
+      return heading * 180 / Math.PI;
+    }
+
+    function headingFromOrientationEvent(event, treatAsAbsolute) {
+      if (typeof event.webkitCompassHeading === 'number' && Number.isFinite(event.webkitCompassHeading)) {
+        return normalizeDegrees(event.webkitCompassHeading);
+      }
+      const usable = treatAsAbsolute || event.absolute === true;
+      if (!usable || typeof event.alpha !== 'number' || !Number.isFinite(event.alpha)) return null;
+      return normalizeDegrees(compassHeadingFromEuler(event.alpha, event.beta, event.gamma) + screenOrientationAngle());
+    }
+
+    function getCompassTarget(now = new Date()) {
+      const moon = MoonEngine.getMoonPosition(now, currentObservationLat, currentObservationLon);
+      if (toAltitudeDeg(moon.altitude) >= 0) {
+        return {
+          compassDeg: MoonEngine.azimuthToCompassDegrees(moon.azimuth),
+          label: '지금 달 방향'
+        };
+      }
+      const rise = MoonEngine.findNextMoonrise(now, currentObservationLat, currentObservationLon);
+      if (!rise) return { compassDeg: null, label: '다음에 달이 뜰 방향' };
+      const risePos = MoonEngine.getMoonPosition(rise, currentObservationLat, currentObservationLon);
+      return {
+        compassDeg: MoonEngine.azimuthToCompassDegrees(risePos.azimuth),
+        label: '다음에 달이 뜰 방향'
+      };
+    }
+
+    function setCompassStatus(message) {
+      setElementText('compassStatus', message);
+      toggleHidden('compassStatus', !message);
+    }
+
+    function rotateCompassArrow(heading) {
+      const arrow = document.getElementById('compassArrow');
+      if (!arrow || compassTargetDeg === null || typeof arrow.setAttribute !== 'function') return;
+      arrow.setAttribute('transform', `rotate(${shortestDegDelta(compassTargetDeg, heading)} 50 50)`);
+    }
+
+    function applyCompassTarget(target) {
+      compassTargetDeg = typeof target.compassDeg === 'number' ? target.compassDeg : null;
+      setElementText('compassTargetLabel', target.label);
+      setElementText(
+        'compassStaticDirection',
+        compassTargetDeg === null ? OBSERVATION_UNAVAILABLE_LABEL : MoonEngine.compassDegreesToCardinal(compassTargetDeg)
+      );
+      const arrow = document.getElementById('compassArrow');
+      if (arrow && typeof arrow.setAttribute === 'function') {
+        arrow.setAttribute('transform', 'rotate(0 50 50)');
+      }
+    }
+
+    function stopOrientationListening() {
+      if (orientationHandler && typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+        window.removeEventListener(orientationEventName, orientationHandler, orientationUseCapture);
+      }
+      orientationHandler = null;
+      orientationEventName = '';
+      if (compassSensorTimer) {
+        clearTimeout(compassSensorTimer);
+        compassSensorTimer = null;
+      }
+    }
+
+    function startOrientationListening() {
+      stopOrientationListening();
+      orientationEventCount = 0;
+      usableHeadingCount = 0;
+      const handler = (event) => {
+        orientationEventCount += 1;
+        const treatAsAbsolute = orientationEventName === 'deviceorientationabsolute';
+        const heading = headingFromOrientationEvent(event, treatAsAbsolute);
+        if (heading === null) return;
+        usableHeadingCount += 1;
+        if (compassSensorTimer) {
+          clearTimeout(compassSensorTimer);
+          compassSensorTimer = null;
+        }
+        setCompassStatus('');
+        rotateCompassArrow(heading);
+      };
+      orientationHandler = handler;
+      const absoluteSupported = typeof window !== 'undefined' && 'ondeviceorientationabsolute' in window;
+      orientationEventName = absoluteSupported ? 'deviceorientationabsolute' : 'deviceorientation';
+      orientationUseCapture = true;
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener(orientationEventName, handler, true);
+      }
+      compassSensorTimer = setTimeout(() => {
+        compassSensorTimer = null;
+        if (usableHeadingCount > 0) return;
+        setCompassStatus(orientationEventCount === 0
+          ? '방향 센서 값을 받지 못했어요'
+          : '정확한 북쪽을 잡지 못했어요');
+      }, COMPASS_SENSOR_WAIT_MS);
+    }
+
+    function closeCompass() {
+      compassPanelOpen = false;
+      stopOrientationListening();
+      toggleHidden('compassPanel', true);
+      const button = document.getElementById('openCompassButton');
+      if (button) {
+        button.textContent = '나침반 열기';
+        if (typeof button.setAttribute === 'function') button.setAttribute('aria-expanded', 'false');
+      }
+    }
+
+    // 센서 권한은 나침반 버튼을 누른 클릭 안에서만 요청합니다.
+    async function openCompass() {
+      if (compassPanelOpen) {
+        closeCompass();
+        return;
+      }
+      compassPanelOpen = true;
+      toggleHidden('compassPanel', false);
+      const button = document.getElementById('openCompassButton');
+      if (button) {
+        button.textContent = '나침반 닫기';
+        if (typeof button.setAttribute === 'function') button.setAttribute('aria-expanded', 'true');
+      }
+      applyCompassTarget(getCompassTarget());
+      setCompassStatus('');
+
+      if (typeof DeviceOrientationEvent === 'undefined') {
+        setCompassStatus('이 기기는 방향 센서를 지원하지 않아요');
+        return;
+      }
+      if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        let permission = 'denied';
+        try {
+          permission = await DeviceOrientationEvent.requestPermission();
+        } catch (_) {
+          permission = 'denied';
+        }
+        if (permission !== 'granted') {
+          setCompassStatus('방향 센서 사용을 허용하지 않아서 화살표는 움직이지 않아요');
+          return;
+        }
+      }
+      startOrientationListening();
     }
   </script>
 </body>
