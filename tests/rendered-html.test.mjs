@@ -500,3 +500,15 @@ test("supports operator-controlled deletion of legacy D1 and R2 student data", a
   assert.match(operator, /getOperatorSession/);
   assert.match(operator, /assertSameOrigin/);
 });
+
+test("ships student moon guidance copy in the built page", async () => {
+  const built = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
+  assert.match(built, /달이 뜨는 때/);
+  assert.match(built, /가장 높을 때/);
+  assert.match(built, /달이 지는 때/);
+  assert.match(built, /id="observationGuidanceCard"/);
+  assert.match(built, /나침반 열기/);
+  assert.match(built, /지금은 너무 늦었어요/);
+  assert.match(built, /async function openCompass/);
+  assert.doesNotMatch(built, /안 보여요/);
+});

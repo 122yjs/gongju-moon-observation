@@ -404,6 +404,9 @@
   .h-11 {
     height: calc(var(--spacing) * 11);
   }
+  .h-36 {
+    height: calc(var(--spacing) * 36);
+  }
   .h-52 {
     height: calc(var(--spacing) * 52);
   }
@@ -448,6 +451,9 @@
   }
   .w-11 {
     width: calc(var(--spacing) * 11);
+  }
+  .w-36 {
+    width: calc(var(--spacing) * 36);
   }
   .w-52 {
     width: calc(var(--spacing) * 52);
@@ -675,6 +681,12 @@
       border-color: color-mix(in oklab, var(--color-amber-400) 30%, transparent);
     }
   }
+  .border-amber-400\/40 {
+    border-color: color-mix(in srgb, oklch(82.8% 0.189 84.429) 40%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, var(--color-amber-400) 40%, transparent);
+    }
+  }
   .border-amber-400\/45 {
     border-color: color-mix(in srgb, oklch(82.8% 0.189 84.429) 45%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
@@ -795,6 +807,12 @@
   .bg-black {
     background-color: var(--color-black);
   }
+  .bg-black\/80 {
+    background-color: color-mix(in srgb, #000 80%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--color-black) 80%, transparent);
+    }
+  }
   .bg-black\/90 {
     background-color: color-mix(in srgb, #000 90%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
@@ -817,6 +835,12 @@
     background-color: color-mix(in srgb, oklch(70.7% 0.165 254.624) 7.000000000000001%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
       background-color: color-mix(in oklab, var(--color-blue-400) 7.000000000000001%, transparent);
+    }
+  }
+  .bg-blue-400\/\[\.08\] {
+    background-color: color-mix(in srgb, oklch(70.7% 0.165 254.624) 8%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--color-blue-400) 8%, transparent);
     }
   }
   .bg-emerald-400\/10 {
@@ -892,6 +916,12 @@
     background-color: color-mix(in srgb, #0b0e17 70%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
       background-color: color-mix(in oklab, var(--color-space-900) 70%, transparent);
+    }
+  }
+  .bg-space-900\/80 {
+    background-color: color-mix(in srgb, #0b0e17 80%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--color-space-900) 80%, transparent);
     }
   }
   .bg-space-950 {
