@@ -173,7 +173,10 @@ int moon_decode(const unsigned char *bytes, unsigned int length, unsigned int ma
     moon_error_exit((j_common_ptr)&context->jpeg);
   }
 
-  (void)choose_reduced_scale(&context->jpeg, max_side);
+  if (!choose_reduced_scale(&context->jpeg, max_side)) {
+    context->error.code = MOON_SOURCE_LIMIT;
+    moon_error_exit((j_common_ptr)&context->jpeg);
+  }
   {
     const uint64_t output_pixels = (uint64_t)context->jpeg.output_width * context->jpeg.output_height;
     const uint64_t output_bytes = output_pixels * 4;

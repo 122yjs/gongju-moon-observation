@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -22,7 +23,22 @@ def save_pattern(name, size, progressive=False, orientation=None):
     image.close()
 
 
-save_pattern("original-5222x6024.jpg", (5222, 6024))
-save_pattern("crop-4015x4594.jpg", (4015, 4594))
-save_pattern("progressive-5222x6024.jpg", (5222, 6024), progressive=True)
-save_pattern("oriented-320x480-o6.jpg", (320, 480), orientation=6)
+def save_coefficient_guard(path):
+    # 4096 x 4104 at 4:4:4 has 512 x 513 DCT blocks per component:
+    # 512 * 513 * 3 * 64 coefficients * 2 bytes > 96 MiB.
+    image = Image.new("RGB", (4096, 4104), (40, 70, 100))
+    image.save(path, quality=90, subsampling=0, progressive=True)
+    image.close()
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--coefficient-guard", type=Path)
+arguments = parser.parse_args()
+
+if arguments.coefficient_guard:
+    save_coefficient_guard(arguments.coefficient_guard)
+else:
+    save_pattern("original-5222x6024.jpg", (5222, 6024))
+    save_pattern("crop-4015x4594.jpg", (4015, 4594))
+    save_pattern("progressive-5222x6024.jpg", (5222, 6024), progressive=True)
+    save_pattern("oriented-320x480-o6.jpg", (320, 480), orientation=6)

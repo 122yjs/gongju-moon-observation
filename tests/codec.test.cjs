@@ -1,5 +1,6 @@
 /* Real libjpeg-turbo/WASM verification. Run after building and generating fixtures. */
 const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -30,6 +31,27 @@ function jpegInfo(bytes) {
     if (length < 2 || end > view.byteLength) break;
     if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker) && length >= 8) {
       return { width: view.getUint16(start + 3), height: view.getUint16(start + 1), progressive: marker === 0xc2 };
+    }
+    offset = end;
+  }
+  throw new Error('fixture is not a readable JPEG');
+}
+
+function jpegSampling(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let offset = 2;
+  while (offset + 4 <= view.byteLength) {
+    if (view.getUint8(offset++) !== 0xff) break;
+    while (offset < view.byteLength && view.getUint8(offset) === 0xff) offset += 1;
+    const marker = view.getUint8(offset++);
+    if (marker === 0xda || marker === 0xd9 || offset + 2 > view.byteLength) break;
+    const length = view.getUint16(offset);
+    const start = offset + 2;
+    const end = offset + length;
+    if (length < 2 || end > view.byteLength) break;
+    if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker) && length >= 8) {
+      const components = view.getUint8(start + 5);
+      return Array.from({ length: components }, (_, index) => view.getUint8(start + 7 + index * 3));
     }
     offset = end;
   }
@@ -88,7 +110,10 @@ function freeCodec(codec, pointer) {
 }
 
 async function decode(name, maxSide = 2560, orientation = 1) {
-  const bytes = requireFixture(name);
+  return decodeBytes(requireFixture(name), maxSide, orientation);
+}
+
+async function decodeBytes(bytes, maxSide = 2560, orientation = 1) {
   const { codec, directory } = await loadCodec();
   let pointer = 0;
   try {
@@ -109,18 +134,26 @@ async function decode(name, maxSide = 2560, orientation = 1) {
   }
 }
 
+function coefficientGuardFixture() {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'moon-coefficient-'));
+  const filename = path.join(directory, 'progressive-444-coefficient-limit.jpg');
+  const script = path.join(root, 'scripts', 'make_fixtures.py');
+  const python = process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
+  const result = spawnSync(python, [script, '--coefficient-guard', filename], { encoding: 'utf8' });
+  assert.equal(result.status, 0, `fixture generator failed: ${result.stderr || result.stdout}`);
+  assert.ok(fs.existsSync(filename), 'coefficient-guard fixture was not generated');
+  return { directory, filename };
+}
+
 async function main() {
+  if (!fs.existsSync(source)) {
+    throw new Error('Codec is not built. Run bash scripts/build_photo_codec.sh before native-codec verification.');
+  }
+
   assert.deepEqual(jpegInfo(requireFixture('original-5222x6024.jpg')), { width: 5222, height: 6024, progressive: false });
   assert.deepEqual(jpegInfo(requireFixture('crop-4015x4594.jpg')), { width: 4015, height: 4594, progressive: false });
   assert.deepEqual(jpegInfo(requireFixture('progressive-5222x6024.jpg')), { width: 5222, height: 6024, progressive: true });
   assert.equal(exifOrientation(requireFixture('oriented-320x480-o6.jpg')), 6, 'orientation fixture must contain EXIF orientation 6');
-
-  if (!fs.existsSync(source)) {
-    const message = 'Codec is not built. Run bash scripts/build_photo_codec.sh before native-codec verification.';
-    if (process.env.MOON_REQUIRE_CODEC === '1') throw new Error(message);
-    console.log(`codec verification skipped: ${message}`);
-    return;
-  }
 
   {
     const decoded = await decode('original-5222x6024.jpg');
@@ -146,6 +179,18 @@ async function main() {
       assert.equal(decoded.status, 0, 'bounded progressive JPEG must decode');
       assert.equal(decoded.codec._moon_progressive(), 1, 'codec must report progressive sources');
       assert.ok(decoded.codec._moon_width() * decoded.codec._moon_height() <= MAX_OUTPUT_PIXELS);
+    } finally {
+      freeCodec(decoded.codec, decoded.pointer);
+      fs.rmSync(decoded.directory, { recursive: true, force: true });
+    }
+  }
+
+  {
+    const decoded = await decode('oriented-320x480-o6.jpg', 1, 1);
+    try {
+      assert.equal(decoded.status, 2, 'a target below the smallest reduced-IDCT scale must be rejected');
+      assert.equal(decoded.codec._moon_data(), 0, 'rejected target must not retain output state');
+      assert.equal(decoded.codec._moon_length(), 0, 'rejected target must not retain output length');
     } finally {
       freeCodec(decoded.codec, decoded.pointer);
       fs.rmSync(decoded.directory, { recursive: true, force: true });
@@ -179,12 +224,46 @@ async function main() {
       assert.ok(pointer);
       codec.HEAPU8.set(invalid, pointer);
       assert.notEqual(codec._moon_decode(pointer, invalid.length, 2560, 1), 0, 'invalid JPEG must fail');
-      assert.notEqual(codec._moon_decode(pointer, MAX_SOURCE_BYTES + 1, 2560, 1), 0, 'oversized source length must fail before decode');
       assert.equal(codec._moon_data(), 0, 'failed decode must not retain output state');
       assert.equal(codec._moon_length(), 0, 'failed decode must not retain output length');
     } finally {
       freeCodec(codec, pointer);
       fs.rmSync(directory, { recursive: true, force: true });
+    }
+  }
+
+  {
+    const oversized = new Uint8Array(MAX_SOURCE_BYTES + 1);
+    oversized[0] = 0xff;
+    oversized[1] = 0xd8;
+    const decoded = await decodeBytes(oversized);
+    try {
+      assert.equal(decoded.status, 2, 'a real source over 20MiB must fail with the source limit');
+      assert.equal(decoded.codec._moon_data(), 0, 'oversized source must not retain output state');
+      assert.equal(decoded.codec._moon_length(), 0, 'oversized source must not retain output length');
+    } finally {
+      freeCodec(decoded.codec, decoded.pointer);
+      fs.rmSync(decoded.directory, { recursive: true, force: true });
+    }
+  }
+
+  {
+    const generated = coefficientGuardFixture();
+    try {
+      const bytes = fs.readFileSync(generated.filename);
+      assert.deepEqual(jpegInfo(bytes), { width: 4096, height: 4104, progressive: true });
+      assert.deepEqual(jpegSampling(bytes), [0x11, 0x11, 0x11], 'coefficient-guard fixture must use 4:4:4 sampling');
+      const decoded = await decodeBytes(bytes);
+      try {
+        assert.equal(decoded.status, 3, 'a progressive 4:4:4 coefficient image over the 96MiB guard must fail with the memory limit');
+        assert.equal(decoded.codec._moon_data(), 0, 'coefficient guard rejection must not retain output state');
+        assert.equal(decoded.codec._moon_length(), 0, 'coefficient guard rejection must not retain output length');
+      } finally {
+        freeCodec(decoded.codec, decoded.pointer);
+        fs.rmSync(decoded.directory, { recursive: true, force: true });
+      }
+    } finally {
+      fs.rmSync(generated.directory, { recursive: true, force: true });
     }
   }
 
