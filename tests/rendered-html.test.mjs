@@ -513,3 +513,15 @@ test("ships student moon guidance copy in the built page", async () => {
   assert.match(built, /async function openCompass/);
   assert.doesNotMatch(built, /안 보여요/);
 });
+
+test("integrates safe high-resolution photo pipeline and worker into the student upload flow", async () => {
+  const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
+  assert.match(html, /<script src="\/photo-pipeline\.js"><\/script>/);
+  assert.match(html, /MoonPhotoPipeline\.compress/);
+  assert.match(html, /workerUrl:\s*['"]\/photo-worker\.js['"]/);
+  assert.match(html, /suspendPhotoPreviewForProcessing/);
+  assert.match(html, /restorePhotoPreviewAfterProcessingError/);
+  assert.match(html, /고화질 촬영/);
+  assert.match(html, /formData\.append\(['"]photo['"],\s*compressedImageBlob,\s*['"]moon\.jpg['"]\)/);
+  assert.match(html, /fetch\(['"]\/api\/observations['"]/);
+});
