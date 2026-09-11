@@ -1,0 +1,65 @@
+name: Verify iOS photo pipeline (no deployment)
+
+on:
+  push:
+    branches: [chatgpt/ios-photo-pipeline]
+  pull_request:
+    paths:
+      - 'public/photo-*.js'
+      - 'public/index.html'
+      - 'tests/photo-*.test.mjs'
+      - '.github/workflows/ios-photo-review.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-photo-review-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  integrate-and-verify:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/chatgpt/ios-photo-pipeline'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Apply guarded integration on this review branch only
+        run: node scripts/prepare-ios-photo-integration.mjs
+      - run: npm ci
+      - run: npm run build:static
+      - run: npx vinext build
+      - run: node --test tests/*.test.mjs
+      - run: npm run lint
+      - name: Save the tested HTML integration without touching main
+        run: |
+          test "$GITHUB_REF" = 'refs/heads/chatgpt/ios-photo-pipeline'
+          git diff --check
+          git add -- public/index.html
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'fix: load tested photo pipeline on student page'
+            git push origin HEAD:refs/heads/chatgpt/ios-photo-pipeline
+          fi
+  pull-request-checks:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build:static
+      - run: npx vinext build
+      - run: node --test tests/*.test.mjs
+      - run: npm run lint
