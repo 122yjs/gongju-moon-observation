@@ -31,6 +31,7 @@
     'worker-message-failed': 'The safe JPEG decoder returned an invalid response.',
     'worker-timeout': 'The safe JPEG decoder timed out.',
     'invalid-worker-output': 'The safe JPEG decoder returned an invalid image.',
+    'target-limit': 'The requested JPEG output dimensions exceed the safe limit.',
     'encode-unavailable': 'A JPEG encoder is not available.',
     'encode-empty': 'The JPEG encoder returned no image.',
     'encode-failed': 'The JPEG encoder failed.',
@@ -183,7 +184,14 @@
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
-    const context = canvas.getContext('2d');
+    let context;
+    try {
+      context = canvas.getContext('2d');
+    } catch (_) {
+      canvas.width = 0;
+      canvas.height = 0;
+      throw problem('canvas-context');
+    }
     if (!context) {
       canvas.width = 0;
       canvas.height = 0;
