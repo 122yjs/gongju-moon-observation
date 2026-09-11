@@ -16,7 +16,7 @@ async function page(saved, scope = 'class-a') {
   const events = new Map();
   const element = (id) => {
     if (!elements.has(id)) elements.set(id, { id, value: '', textContent: '', className: '', dataset: {},
-      classList: { add() {}, remove() {}, toggle() {} },
+      classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
       addEventListener: (name, fn) => events.set(`${id}:${name}`, fn),
       setAttribute() {}, removeAttribute(name) { delete this[name]; },
     });
