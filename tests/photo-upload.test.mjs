@@ -5,7 +5,7 @@ import vm from 'node:vm';
 const source=readFileSync(new URL('../public/photo-upload.js',import.meta.url),'utf8');
 function harness(options={}) {
  const nodes=new Map();
- const calls={reset:0,cleared:0,requests:[],photoStatus:[],submitStatus:[],revoked:[],session:0};
+ const calls={reset:0,cleared:0,requests:[],photoStatus:[],submitStatus:[],revoked:[],session:0,pending:0,saved:[]};
  function element(id='') {
   const e={id,dataset:{},value:'',children:[],listeners:{},classList:{add(){},remove(){}},setAttribute(k,v){this[k]=v;},removeAttribute(k){delete this[k];},addEventListener(k,v){this.listeners[k]=v;},append(...children){this.children.push(...children);},appendChild(child){this.children.push(child);},reset(){calls.reset++;},focus(){},select(){}};
   if(id)nodes.set(id,e);return e;
@@ -20,6 +20,7 @@ function harness(options={}) {
   URL:{revokeObjectURL(url){calls.revoked.push(url);},createObjectURL(){return'blob:new';}},
   MoonPhotoPipeline:options.absent?undefined:{version:'test',create:()=>pipeline},
   photoStatus:(...a)=>calls.photoStatus.push(a),submitStatus:(...a)=>calls.submitStatus.push(a),
+  saveDraft:force=>calls.saved.push(force),writePending:()=>calls.pending++,
   incrementReset:()=>calls.cleared++,incrementSession:()=>calls.session++,nodes
  });
  vm.runInContext(`
@@ -27,7 +28,8 @@ function harness(options={}) {
  let pendingRequestId='existing-id',previewObjectUrl='blob:previous',hasClassSession=true,galleryLoaded=false;
  function readPhotoDimensions(){} function compressImage(){} function previewPhoto(){} function submitObservation(){}
  function setPhotoBusy(value){photoProcessing=value;} function setSubmitBusy(value){submissionBusy=value;}
- function clearCameraPending(){} function saveObservationDraft(){} function stopCamera(){}
+ function prepareExternalCamera(){compressedImageBlob=null;} function writeCameraPending(){writePending();}
+ function clearCameraPending(){} function saveObservationDraft(force){saveDraft(force);} function stopCamera(){}
  function showPhotoStatus(...args){photoStatus(...args);} function showSubmitStatus(...args){submitStatus(...args);}
  function attachPhoto(blob){compressedImageBlob=blob;pendingRequestId='';if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);previewObjectUrl=URL.createObjectURL(blob);nodes.get('photoPreview').src=previewObjectUrl;}
  function clearObservationDraft(){incrementReset();} function checkSession(){incrementSession();}
@@ -49,3 +51,4 @@ test('successful API response alone clears current form and attachment',async()=
 test('401 rechecks session without clearing photo',async()=>{const h=harness({status:401});await h.submit();assert.equal(h.calls.session,1);assert.equal(h.get('compressedImageBlob'),h.oldBlob);assert.equal(h.calls.reset,0);});
 test('unconfirmed response is never displayed as success',async()=>{const h=harness({sendThrows:Object.assign(new Error('bad response'),{photoCode:'UPLOAD_RESULT_UNKNOWN'})});await h.submit();assert.equal(h.calls.reset,0);assert.equal(h.get('pendingRequestId'),'existing-id');assert.ok(h.calls.submitStatus.at(-1)[0].includes('제출 여부'));});
 test('UUID exception also releases submission busy state',async()=>{const h=harness({uuidThrows:true});vm.runInContext("pendingRequestId=''",h.context);await h.submit();assert.equal(h.get('submissionBusy'),false);assert.equal(h.calls.requests.length,0);});
+test('external camera launch saves pending state without discarding an attached photo',()=>{const h=harness();h.context.prepareExternalCamera();assert.equal(h.get('compressedImageBlob'),h.oldBlob);assert.equal(h.get('pendingRequestId'),'existing-id');assert.equal(h.calls.pending,1);assert.deepEqual(h.calls.saved,[true]);assert.equal(h.get('previewObjectUrl'),'blob:previous');});

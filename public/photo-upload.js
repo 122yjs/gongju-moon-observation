@@ -15,6 +15,17 @@
   const byId = id => root.document.getElementById(id);
   root.compressImage = file => pipeline.compress(file, root.readPhotoDimensions);
 
+  root.prepareExternalCamera = function (event) {
+    if (photoProcessing || submissionBusy) { if (event) event.preventDefault(); return; }
+    root.saveObservationDraft(true);
+    root.writeCameraPending();
+    root.stopCamera();
+    // Keep an already attached photo until a new result has been processed.
+    // This does not persist an unreturned native camera file across process death.
+    const input = byId('captureInput');
+    if (input) input.value = '';
+  };
+
   root.previewPhoto = async function (event, source = 'gallery') {
     const input = event.target;
     if (photoProcessing || submissionBusy) { input.value = ''; return; }

@@ -13,9 +13,9 @@ if (html.includes(scripts)) {
   if (sha !== '4b6e914c41e51e6449100c5088bccf9e3cd57a95') {
     throw new Error('Student HTML differs from the reviewed baseline; manual integration review required.');
   }
-  if (html.split('</body>').length !== 2 || html.includes('/photo-pipeline.js') || html.includes('/photo-upload.js')) {
+  if (html.split('</head>').length !== 2 || html.includes('/photo-pipeline.js') || html.includes('/photo-upload.js')) {
     throw new Error('Unexpected or partial photo pipeline integration.');
   }
-  await writeFile(path, html.replace('</body>', `${scripts}</body>`));
+  await writeFile(path, html.replace('</head>', `${scripts}</head>`));
   console.log('Added ordered classic deferred scripts; original student functions and data APIs unchanged.');
 }
