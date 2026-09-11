@@ -52,7 +52,7 @@
       const events = Array.isArray(previous) ? previous.slice(-DIAGNOSTIC_LIMIT + 1) : [];
       events.push({ at: Date.now(), stage, status, ...(code ? { code } : {}) });
       localStorage.setItem(DIAGNOSTIC_KEY, JSON.stringify(events));
-    } catch (_) {
+    } catch {
       // Diagnostics must never affect photo processing.
     }
   }
@@ -162,7 +162,7 @@
     let buffer;
     try {
       buffer = await file.arrayBuffer();
-    } catch (_) {
+    } catch {
       throw problem('source-limit');
     }
     if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 1 || buffer.byteLength > MAX_SOURCE_BYTES) throw problem('source-limit');
@@ -187,7 +187,7 @@
     let context;
     try {
       context = canvas.getContext('2d');
-    } catch (_) {
+    } catch {
       canvas.width = 0;
       canvas.height = 0;
       throw problem('canvas-context');
@@ -242,9 +242,9 @@
         try {
           if (typeof image.removeAttribute === 'function') image.removeAttribute('src');
           else image.src = '';
-        } catch (_) {}
+        } catch {}
         if (url) {
-          try { URL.revokeObjectURL(url); } catch (_) {}
+          try { URL.revokeObjectURL(url); } catch {}
           url = null;
         }
       };
@@ -269,7 +269,7 @@
         image.onerror = () => finish(problem('image-decode-failed'));
         image.decoding = 'async';
         image.src = url;
-      } catch (_) {
+      } catch {
         finish(problem('image-decode-failed'));
       }
     });
@@ -305,7 +305,7 @@
         finished = true;
         clearTimeout(timer);
         if (worker) {
-          try { worker.terminate(); } catch (_) {}
+          try { worker.terminate(); } catch {}
         }
         if (error) reject(error); else resolve(value);
       };
@@ -325,7 +325,7 @@
           finish(null, { width: data.width, height: data.height, rgba });
         };
         worker.postMessage({ type: 'decode', maxSide, buffer }, [buffer]);
-      } catch (_) {
+      } catch {
         finish(problem('worker-unavailable'));
       }
     });
@@ -351,7 +351,7 @@
           if (blob.type !== 'image/jpeg') return finish(problem('encode-failed'));
           finish(null, blob);
         }, 'image/jpeg', quality);
-      } catch (_) {
+      } catch {
         finish(problem('encode-failed'));
       }
     });

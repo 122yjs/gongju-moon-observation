@@ -220,7 +220,10 @@ test('a Worker onerror never starts a native decoder fallback', async () => {
   let bitmapCalls = 0;
   let imageCalls = 0;
   class ErrorWorker {
-    constructor() { worker = this; }
+    constructor() {
+      // eslint-disable-next-line @typescript-eslint/no-this-alias
+      worker = this;
+    }
     postMessage() { this.onerror?.(new Error('worker stopped')); }
     terminate() { this.terminated = true; }
   }
@@ -245,7 +248,10 @@ test('a Worker timeout never starts a native decoder fallback and terminates the
   let bitmapCalls = 0;
   let imageCalls = 0;
   class SilentWorker {
-    constructor() { worker = this; }
+    constructor() {
+      // eslint-disable-next-line @typescript-eslint/no-this-alias
+      worker = this;
+    }
     postMessage() {}
     terminate() { this.terminated = true; }
   }

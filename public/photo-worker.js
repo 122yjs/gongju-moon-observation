@@ -131,8 +131,8 @@ self.onmessage = async ({ data }) => {
     self.postMessage({ type: 'error', code: allowed.has(error && error.code) ? error.code : 'codec-unavailable' });
   } finally {
     if (codec) {
-      try { if (input) codec._free(input); } catch (_) {}
-      try { codec._moon_release(); } catch (_) {}
+      try { if (input) codec._free(input); } catch {}
+      try { codec._moon_release(); } catch {}
     }
     busy = false;
     self.close();

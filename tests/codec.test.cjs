@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /* Real libjpeg-turbo/WASM verification. Run after building and generating fixtures. */
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
@@ -105,8 +106,8 @@ async function loadCodec() {
 }
 
 function freeCodec(codec, pointer) {
-  try { if (pointer) codec._free(pointer); } catch (_) {}
-  try { codec._moon_release(); } catch (_) {}
+  try { if (pointer) codec._free(pointer); } catch {}
+  try { codec._moon_release(); } catch {}
 }
 
 async function decode(name, maxSide = 2560, orientation = 1) {
