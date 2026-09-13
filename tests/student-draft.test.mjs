@@ -76,7 +76,6 @@ test('corrupt or unavailable tab storage does not break session initialization',
   assert.equal((await page(saved)).element('studentName').value, '');
   const unavailable = { getItem() { throw Error('blocked'); }, setItem() { throw Error('quota'); }, removeItem() {} };
   const first = await page(unavailable);
-  assert.equal(first.element('submitClassLabel').textContent, '우리 반');
   assert.doesNotThrow(() => first.events.get('observationForm:input')?.({ target: first.element('memo') }));
 });
 

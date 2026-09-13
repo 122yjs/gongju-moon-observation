@@ -58,9 +58,9 @@
       border-top-color: currentColor; border-radius: 999px; animation: spin .7s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .compass-dial { display: block; width: 100%; max-width: 300px; height: auto; margin: 0 auto; }
+    .compass-dial { display: block; width: 100%; max-width: 180px; height: auto; margin: 0 auto; }
     /* 안내 문구가 한 줄에서 두 줄로 바뀌어도 카드 높이가 흔들리지 않게 자리를 미리 잡아 둡니다. */
-    .compass-instruction { min-height: 3.5rem; }
+    .compass-instruction { min-height: 2.5rem; }
     .compass-calibrate-hint { display: none; }
     .compass-calibrate-hint:not(.hidden) { display: flex; }
     .compass-dial.compass-calibrating { opacity: .45; }
@@ -195,9 +195,6 @@
           <p id="observationGuidanceDetail" class="mt-2 hidden text-sm leading-6 text-slate-300"></p>
           <p id="observationGuidanceNext" class="mt-2 hidden text-sm leading-6 text-slate-300"></p>
         </article>
-        <div class="mt-4 rounded-2xl border border-amber-400/20 bg-amber-400/[.07] p-4 text-sm text-amber-100">
-          <strong id="submitClassLabel">우리 반</strong> 학생용 제출함입니다. 사진은 수업용 비공개 저장소에 안전하게 보관됩니다.
-        </div>
         <div class="mt-4 grid gap-3 sm:grid-cols-3">
           <article class="rounded-2xl border border-space-700 bg-space-900/70 p-4">
             <p class="text-sm font-black text-white">달이 뜨는 때</p>
@@ -218,141 +215,14 @@
             <p id="submitMoonsetDirection" class="mt-1 text-xs text-indigo-300"></p>
           </article>
         </div>
-        <div class="mt-4">
-          <button type="button" id="openCompassButton" onclick="openCompass()" aria-expanded="false" aria-controls="compassPanel" class="flex items-center justify-center gap-2 min-h-12 w-full rounded-2xl border border-amber-400/35 bg-gradient-to-r from-amber-500/10 via-amber-400/15 to-amber-500/10 px-5 py-3.5 font-black text-amber-200 shadow-lg shadow-amber-500/5 transition hover:border-amber-300 hover:bg-amber-400/20 active:scale-[0.99]">
-            <span class="text-lg" aria-hidden="true">🧭</span>
-            <span>나침반 열기</span>
-          </button>
-          <div id="compassPanel" class="mt-4 hidden rounded-3xl border border-indigo-500/25 bg-gradient-to-b from-space-900/95 via-space-950/90 to-space-950 p-5 sm:p-6 shadow-2xl backdrop-blur-2xl relative overflow-hidden">
-            <div class="pointer-events-none absolute -top-20 -left-20 h-44 w-44 rounded-full bg-amber-500/10 blur-3xl" aria-hidden="true"></div>
-            <div class="pointer-events-none absolute -bottom-20 -right-20 h-44 w-44 rounded-full bg-blue-500/10 blur-3xl" aria-hidden="true"></div>
-            
-            <div class="flex flex-col items-center gap-1.5 border-b border-white/10 pb-3 text-center">
-              <div class="inline-flex items-center gap-2 whitespace-nowrap rounded-full border border-amber-400/30 bg-amber-400/10 px-3.5 py-1 text-xs font-bold text-amber-200 shadow-sm">
-                <span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-                <span id="compassTargetLabel">지금 달이 있는 쪽</span>
-                <span class="text-white font-black" id="compassStaticDirection"></span>
-              </div>
-              <p id="compassModeLabel" class="text-[11px] font-medium text-slate-400 break-keep">북쪽을 위에 놓은 학습 그림 · 실제 방향과 연결 전</p>
-            </div>
-
-            <div class="my-4 flex justify-center">
-              <div class="relative">
-              <!-- 보정 중에는 실제 방위 대신 '몸을 돌리면 방위판도 따라 돈다'는 모습만 크게 보여 줍니다. -->
-              <p id="compassCalibrateHint" class="compass-calibrate-hint hidden pointer-events-none absolute inset-0 z-10 flex-col items-center justify-center gap-1.5 rounded-full bg-space-950/80 px-8 text-center backdrop-blur-[2px]">
-                <span class="text-3xl select-none" aria-hidden="true">✍️</span>
-                <span class="text-sm font-black text-amber-200 break-keep">나침반 준비 중</span>
-                <span class="text-[11px] font-medium leading-4 text-slate-300 break-keep">움직이는 대로 방위판이 돌아요</span>
-              </p>
-              <svg id="compassDial" viewBox="0 0 280 280" class="compass-dial drop-shadow-[0_12px_30px_rgba(0,0,0,0.6)]" role="img" aria-label="북쪽을 위에 놓은 동서남북 학습 그림">
-                <defs>
-                  <radialGradient id="dialBg" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" stop-color="#141c2e"/>
-                    <stop offset="85%" stop-color="#090d16"/>
-                    <stop offset="100%" stop-color="#05070c"/>
-                  </radialGradient>
-                  <linearGradient id="needleN" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stop-color="#fb7185"/>
-                    <stop offset="100%" stop-color="#e11d48"/>
-                  </linearGradient>
-                  <linearGradient id="needleS" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stop-color="#94a3b8"/>
-                    <stop offset="100%" stop-color="#64748b"/>
-                  </linearGradient>
-                  <linearGradient id="moonGold" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stop-color="#fef08a"/>
-                    <stop offset="100%" stop-color="#f59e0b"/>
-                  </linearGradient>
-                  <filter id="moonGlow" x="-30%" y="-30%" width="160%" height="160%">
-                    <feGaussianBlur stdDeviation="3" result="blur"/>
-                    <feComposite in="SourceGraphic" in2="blur" operator="over"/>
-                  </filter>
-                </defs>
-                <!-- 다이얼 외곽 및 배경 -->
-                <circle cx="140" cy="140" r="124" fill="none" stroke="#334155" stroke-width="1" stroke-opacity="0.4"></circle>
-                <circle cx="140" cy="140" r="114" fill="url(#dialBg)" stroke="#475569" stroke-width="2"></circle>
-                <circle cx="140" cy="140" r="114" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-opacity="0.3" stroke-dasharray="2 6"></circle>
-                <circle cx="140" cy="140" r="70" fill="none" stroke="#334155" stroke-width="1" stroke-dasharray="3 3" stroke-opacity="0.5"></circle>
-
-                <!-- 회전하는 나침반 눈금 및 바늘 -->
-                <g id="compassRose">
-                  <!-- 방위 눈금 -->
-                  <g stroke="#64748b" stroke-width="1.5" stroke-linecap="round" opacity="0.8">
-                    <path d="M140 28v10 M252 140h-10 M140 252v-10 M28 140h10"></path>
-                    <path d="M60 60l7 7 M220 60l-7 7 M220 220l-7-7 M60 220l7-7" stroke-width="1"></path>
-                    <!-- 30도 간격 미세 눈금 -->
-                    <path d="M196 43l-4 7 M237 84l-7 4 M237 196l-7-4 M196 237l-4-7 M84 237l4-7 M43 196l7-4 M43 84l7-4 M84 43l4 7" stroke="#475569" stroke-width="1" opacity="0.6"></path>
-                  </g>
-                  <!-- 서브 로즈 장식 (8방위 별) -->
-                  <polygon points="140,95 144,136 185,140 144,144 140,185 136,144 95,140 136,136" fill="#1e293b" opacity="0.6"></polygon>
-                  <!-- 나침반 바늘 (북/남 입체 셰이딩) -->
-                  <polygon points="140,80 148,140 140,140" fill="url(#needleN)"></polygon>
-                  <polygon points="140,80 132,140 140,140" fill="#f43f5e"></polygon>
-                  <polygon points="140,200 148,140 140,140" fill="url(#needleS)"></polygon>
-                  <polygon points="140,200 132,140 140,140" fill="#475569"></polygon>
-                </g>
-
-                <!-- 고정 텍스트 4방위 라벨 (JS에서 x, y 계산 업데이트) -->
-                <text id="compassNorth" x="140" y="48" text-anchor="middle" dominant-baseline="central" fill="#fb7185" font-size="20" font-weight="900" font-family="system-ui, -apple-system, sans-serif">북</text>
-                <text id="compassEast" x="232" y="140" text-anchor="middle" dominant-baseline="central" fill="#e2e8f0" font-size="20" font-weight="900" font-family="system-ui, -apple-system, sans-serif">동</text>
-                <text id="compassSouth" x="140" y="232" text-anchor="middle" dominant-baseline="central" fill="#e2e8f0" font-size="20" font-weight="900" font-family="system-ui, -apple-system, sans-serif">남</text>
-                <text id="compassWest" x="48" y="140" text-anchor="middle" dominant-baseline="central" fill="#e2e8f0" font-size="20" font-weight="900" font-family="system-ui, -apple-system, sans-serif">서</text>
-
-                <!-- 달 마커 -->
-                <g id="compassMoon" visibility="hidden" filter="url(#moonGlow)">
-                  <circle r="16" fill="url(#moonGold)" stroke="#090d16" stroke-width="2.5"></circle>
-                  <circle cx="5" cy="-5" r="3.5" fill="#f59e0b" opacity="0.3"></circle>
-                  <circle cx="-4" cy="4" r="2.5" fill="#f59e0b" opacity="0.3"></circle>
-                  <text text-anchor="middle" dominant-baseline="central" fill="#090d16" font-size="13" font-weight="900" font-family="system-ui, -apple-system, sans-serif">달</text>
-                </g>
-
-                <!-- 중앙 관찰자 ("나") -->
-                <circle cx="140" cy="140" r="18" fill="#1e293b" stroke="#3b82f6" stroke-width="2" stroke-opacity="0.8"></circle>
-                <circle cx="140" cy="140" r="14" fill="#0f172a"></circle>
-                <text x="140" y="140" text-anchor="middle" dominant-baseline="central" fill="#93c5fd" font-size="12" font-weight="800" font-family="system-ui, -apple-system, sans-serif">나</text>
-
-                <!-- 내 앞 조준 가이드 -->
-                <g id="compassFront" visibility="hidden" fill="#38bdf8">
-                  <text x="140" y="12" text-anchor="middle" font-size="11" font-weight="700" fill="#38bdf8">내 앞 · 화면 위쪽</text>
-                  <path d="M140 17l-4 6h8z"></path>
-                </g>
-              </svg>
-              </div>
-            </div>
-
-            <!-- 직관적인 스마트 안내 카드 -->
-            <div class="mt-2 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-center backdrop-blur-md shadow-inner break-keep">
-              <div class="flex items-center justify-center gap-1.5 text-xs font-bold text-slate-300">
-                <span class="inline-block h-1.5 w-1.5 rounded-full bg-blue-400"></span>
-                <span id="compassFacingLabel">빨간 바늘은 북쪽을 가리켜요</span>
-              </div>
-              <p id="compassInstruction" class="compass-instruction mt-2 flex items-center justify-center text-lg sm:text-xl font-black text-amber-200" role="status">휴대폰 방향을 확인하고 있어요</p>
-              <p id="compassHeightHint" class="mt-1.5 text-xs font-medium text-slate-400"></p>
-            </div>
-
-            <!-- 자세 가이드 카드 -->
-            <div class="mt-3 flex items-start gap-2.5 rounded-2xl border border-blue-400/20 bg-blue-500/[0.07] p-3.5 text-left text-xs leading-relaxed text-blue-100">
-              <span class="text-base select-none shrink-0" aria-hidden="true">📱</span>
-              <p id="compassPosture" class="m-0 text-blue-100 break-keep">화면이 위를 향하게 쟁반처럼 평평하게 들고, 금속 물건에서 떨어져요.</p>
-            </div>
-
-            <p id="compassStatus" class="mt-2.5 hidden rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-2.5 text-center text-xs font-bold text-rose-200" role="status"></p>
-
-            <!-- 동서남북 원리 학습 아코디언 -->
-            <details class="group mt-3 rounded-2xl border border-white/10 bg-white/[0.02] p-3.5 text-xs leading-relaxed text-slate-300 transition hover:border-white/20 break-keep">
-              <summary class="flex cursor-pointer list-none items-center justify-between font-bold text-slate-200">
-                <span>🧭 동·서·남·북은 어떻게 읽을까요?</span>
-                <span class="transition group-open:rotate-180 text-slate-400" aria-hidden="true">▾</span>
-              </summary>
-              <div class="mt-2.5 space-y-2 border-t border-white/5 pt-2.5 text-slate-300">
-                <p>북쪽을 바라보면 오른쪽은 동쪽, 뒤쪽은 남쪽, 왼쪽은 서쪽이에요. 내가 돌아도 북쪽은 같은 쪽에 있어요. 그래서 나침반의 방위판이 반대로 돌아요.</p>
-                <p>노란 ‘달’ 표시는 달이 있는 쪽이에요. 원 아래에 있으면 땅속이 아니라 내 뒤쪽이라는 뜻이에요. 달의 높이는 나침반 아래 안내를 읽어요.</p>
-              </div>
-            </details>
-            
-            <p class="mt-3 text-center text-[11px] text-slate-500">기기 센서에 따라 방향이 조금 다를 수 있어요</p>
-          </div>
-        </div>
+        <aside class="mt-4 rounded-2xl border-2 border-amber-400/60 bg-amber-400/10 px-4 py-3.5 shadow-lg shadow-amber-500/10" aria-label="사진 개인정보 보호 안내">
+          <p class="flex items-center gap-2 text-sm font-black text-amber-100"><span aria-hidden="true">🔒</span> 개인정보가 보이지 않게 촬영해요</p>
+          <p class="mt-1.5 text-xs font-medium leading-5 text-amber-50/90">얼굴, 집 주소, 차량 번호는 나오지 않게 달과 하늘 중심으로 찍어 주세요. 사진의 위치정보는 압축할 때 제거됩니다.</p>
+        </aside>
+        <button type="button" id="openCompassButton" onclick="openCompass()" aria-haspopup="dialog" aria-controls="compassIntroDialog" class="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-space-600 bg-space-900/70 px-4 py-3 text-sm font-bold text-slate-200 transition hover:border-blue-400/50 hover:bg-blue-400/10 hover:text-blue-100">
+          <span aria-hidden="true">🧭</span>
+          <span>나침반 열기</span>
+        </button>
 
         <form id="observationForm" class="mt-6 space-y-5" onsubmit="submitObservation(event)">
           <div class="grid gap-4 sm:grid-cols-2">
@@ -398,6 +268,123 @@
             <div id="photoPlaceholder" class="mt-3 text-center">
               <p class="text-xs text-slate-500">JPG·PNG·WebP 사진 20MB 이하 · 사진 선택 중 앱이 닫히면 ‘촬영이 안 될 때’의 페이지 안 카메라를 이용해 주세요.</p>
             </div>
+            <div id="compassPanel" class="fixed left-1/2 top-1/2 z-50 hidden w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-3xl border border-indigo-500/25 bg-gradient-to-b from-space-900 via-space-950 to-space-950 p-4 shadow-[0_0_0_100vmax_rgba(0,0,0,0.85)] sm:p-5" role="dialog" aria-modal="true" aria-label="달 방향 나침반">
+              <div class="pointer-events-none absolute -top-20 -left-20 h-44 w-44 rounded-full bg-amber-500/10 blur-3xl" aria-hidden="true"></div>
+              <div class="pointer-events-none absolute -bottom-20 -right-20 h-44 w-44 rounded-full bg-blue-500/10 blur-3xl" aria-hidden="true"></div>
+              <button type="button" id="closeCompassButton" onclick="closeCompass()" class="absolute right-3 top-3 z-20 grid h-10 w-10 place-items-center rounded-full bg-white/10 text-xl font-bold text-slate-200 hover:bg-white/20" aria-label="나침반 닫기">×</button>
+
+              <div class="flex flex-col items-center gap-0.5 border-b border-white/10 pb-2 text-center">
+                <div class="inline-flex items-center gap-2 whitespace-nowrap rounded-full border border-amber-400/30 bg-amber-400/10 px-3.5 py-1 text-xs font-bold text-amber-200 shadow-sm">
+                  <span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                  <span id="compassTargetLabel">지금 달이 있는 쪽</span>
+                  <span class="text-white font-black" id="compassStaticDirection"></span>
+                </div>
+                <p id="compassModeLabel" class="text-[11px] font-medium text-slate-400 break-keep">북쪽을 위에 놓은 학습 그림 · 실제 방향과 연결 전</p>
+              </div>
+
+              <div class="my-2 flex justify-center">
+                <div class="relative">
+                <!-- 보정 중에는 실제 방위 대신 '몸을 돌리면 방위판도 따라 돈다'는 모습만 크게 보여 줍니다. -->
+                <p id="compassCalibrateHint" class="compass-calibrate-hint hidden pointer-events-none absolute inset-0 z-10 flex-col items-center justify-center gap-1.5 rounded-full bg-space-950/80 px-8 text-center backdrop-blur-[2px]">
+                  <span class="text-3xl select-none" aria-hidden="true">✍️</span>
+                  <span class="text-sm font-black text-amber-200 break-keep">나침반 준비 중</span>
+                  <span class="text-[11px] font-medium leading-4 text-slate-300 break-keep">움직이는 대로 방위판이 돌아요</span>
+                </p>
+                <svg id="compassDial" viewBox="0 0 280 280" class="compass-dial drop-shadow-[0_12px_30px_rgba(0,0,0,0.6)]" role="img" aria-label="북쪽을 위에 놓은 동서남북 학습 그림">
+                  <defs>
+                    <radialGradient id="dialBg" cx="50%" cy="50%" r="50%">
+                      <stop offset="0%" stop-color="#141c2e"/>
+                      <stop offset="85%" stop-color="#090d16"/>
+                      <stop offset="100%" stop-color="#05070c"/>
+                    </radialGradient>
+                    <linearGradient id="needleN" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stop-color="#fb7185"/>
+                      <stop offset="100%" stop-color="#e11d48"/>
+                    </linearGradient>
+                    <linearGradient id="needleS" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stop-color="#94a3b8"/>
+                      <stop offset="100%" stop-color="#64748b"/>
+                    </linearGradient>
+                    <linearGradient id="moonGold" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stop-color="#fef08a"/>
+                      <stop offset="100%" stop-color="#f59e0b"/>
+                    </linearGradient>
+                    <filter id="moonGlow" x="-30%" y="-30%" width="160%" height="160%">
+                      <feGaussianBlur stdDeviation="3" result="blur"/>
+                      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+                    </filter>
+                  </defs>
+                  <!-- 다이얼 외곽 및 배경 -->
+                  <circle cx="140" cy="140" r="124" fill="none" stroke="#334155" stroke-width="1" stroke-opacity="0.4"></circle>
+                  <circle cx="140" cy="140" r="114" fill="url(#dialBg)" stroke="#475569" stroke-width="2"></circle>
+                  <circle cx="140" cy="140" r="114" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-opacity="0.3" stroke-dasharray="2 6"></circle>
+                  <circle cx="140" cy="140" r="70" fill="none" stroke="#334155" stroke-width="1" stroke-dasharray="3 3" stroke-opacity="0.5"></circle>
+
+                  <!-- 회전하는 나침반 눈금 및 바늘 -->
+                  <g id="compassRose">
+                    <!-- 방위 눈금 -->
+                    <g stroke="#64748b" stroke-width="1.5" stroke-linecap="round" opacity="0.8">
+                      <path d="M140 28v10 M252 140h-10 M140 252v-10 M28 140h10"></path>
+                      <path d="M60 60l7 7 M220 60l-7 7 M220 220l-7-7 M60 220l7-7" stroke-width="1"></path>
+                      <!-- 30도 간격 미세 눈금 -->
+                      <path d="M196 43l-4 7 M237 84l-7 4 M237 196l-7-4 M196 237l-4-7 M84 237l4-7 M43 196l7-4 M43 84l7-4 M84 43l4 7" stroke="#475569" stroke-width="1" opacity="0.6"></path>
+                    </g>
+                    <!-- 서브 로즈 장식 (8방위 별) -->
+                    <polygon points="140,95 144,136 185,140 144,144 140,185 136,144 95,140 136,136" fill="#1e293b" opacity="0.6"></polygon>
+                    <!-- 나침반 바늘 (북/남 입체 셰이딩) -->
+                    <polygon points="140,80 148,140 140,140" fill="url(#needleN)"></polygon>
+                    <polygon points="140,80 132,140 140,140" fill="#f43f5e"></polygon>
+                    <polygon points="140,200 148,140 140,140" fill="url(#needleS)"></polygon>
+                    <polygon points="140,200 132,140 140,140" fill="#475569"></polygon>
+                  </g>
+
+                  <!-- 고정 텍스트 4방위 라벨 (JS에서 x, y 계산 업데이트) -->
+                  <text id="compassNorth" x="140" y="48" text-anchor="middle" dominant-baseline="central" fill="#fb7185" font-size="20" font-weight="900" font-family="system-ui, -apple-system, sans-serif">북</text>
+                  <text id="compassEast" x="232" y="140" text-anchor="middle" dominant-baseline="central" fill="#e2e8f0" font-size="20" font-weight="900" font-family="system-ui, -apple-system, sans-serif">동</text>
+                  <text id="compassSouth" x="140" y="232" text-anchor="middle" dominant-baseline="central" fill="#e2e8f0" font-size="20" font-weight="900" font-family="system-ui, -apple-system, sans-serif">남</text>
+                  <text id="compassWest" x="48" y="140" text-anchor="middle" dominant-baseline="central" fill="#e2e8f0" font-size="20" font-weight="900" font-family="system-ui, -apple-system, sans-serif">서</text>
+
+                  <!-- 달 마커 -->
+                  <g id="compassMoon" visibility="hidden" filter="url(#moonGlow)">
+                    <circle r="16" fill="url(#moonGold)" stroke="#090d16" stroke-width="2.5"></circle>
+                    <circle cx="5" cy="-5" r="3.5" fill="#f59e0b" opacity="0.3"></circle>
+                    <circle cx="-4" cy="4" r="2.5" fill="#f59e0b" opacity="0.3"></circle>
+                    <text text-anchor="middle" dominant-baseline="central" fill="#090d16" font-size="13" font-weight="900" font-family="system-ui, -apple-system, sans-serif">달</text>
+                  </g>
+
+                  <!-- 중앙 관찰자 ("나") -->
+                  <circle cx="140" cy="140" r="18" fill="#1e293b" stroke="#3b82f6" stroke-width="2" stroke-opacity="0.8"></circle>
+                  <circle cx="140" cy="140" r="14" fill="#0f172a"></circle>
+                  <text x="140" y="140" text-anchor="middle" dominant-baseline="central" fill="#93c5fd" font-size="12" font-weight="800" font-family="system-ui, -apple-system, sans-serif">나</text>
+
+                  <!-- 내 앞 조준 가이드 -->
+                  <g id="compassFront" visibility="hidden" fill="#38bdf8">
+                    <text x="140" y="12" text-anchor="middle" font-size="11" font-weight="700" fill="#38bdf8">내 앞 · 화면 위쪽</text>
+                    <path d="M140 17l-4 6h8z"></path>
+                  </g>
+                </svg>
+                </div>
+              </div>
+
+              <!-- 직관적인 스마트 안내 카드 -->
+              <div class="mt-1.5 rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-center backdrop-blur-md shadow-inner break-keep">
+                <div class="flex items-center justify-center gap-1.5 text-xs font-bold text-slate-300">
+                  <span class="inline-block h-1.5 w-1.5 rounded-full bg-blue-400"></span>
+                  <span id="compassFacingLabel">빨간 바늘은 북쪽을 가리켜요</span>
+                </div>
+                <p id="compassInstruction" class="compass-instruction mt-1 flex items-center justify-center text-sm font-bold text-amber-200 empty:hidden" role="status">휴대폰 방향을 확인하고 있어요</p>
+                <p id="compassHeightHint" class="mt-1 text-xs font-medium text-slate-400"></p>
+              </div>
+
+              <!-- 자세 가이드 카드 -->
+              <div class="mt-2 flex items-start gap-2.5 rounded-2xl border border-blue-400/20 bg-blue-500/[0.07] p-2.5 text-left text-xs leading-relaxed text-blue-100">
+                <span class="text-base select-none shrink-0" aria-hidden="true">📱</span>
+                <p id="compassPosture" class="m-0 text-blue-100 break-keep">화면이 위를 향하게 쟁반처럼 평평하게 들어요.</p>
+              </div>
+
+              <p id="compassStatus" class="mt-2 hidden rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-center text-xs font-bold text-rose-200" role="status"></p>
+              <p class="sr-only">기기 센서에 따라 방향이 조금 다를 수 있어요</p>
+            </div>
             <div id="photoPreviewWrap" class="mt-3 hidden text-center">
               <img id="photoPreview" alt="선택한 달 사진 미리보기" class="mx-auto max-h-72 rounded-xl border border-amber-400/30 object-contain">
               <p class="mt-2 text-xs font-bold text-amber-300">사진을 바꾸려면 위의 촬영 또는 갤러리 버튼을 다시 눌러 주세요.</p>
@@ -408,8 +395,6 @@
           <label class="block text-sm font-bold">관찰 기록 <span class="font-normal text-slate-500">(선택)</span>
             <textarea id="memo" name="memo" rows="4" maxlength="300" placeholder="달을 본 방향, 모양, 색깔, 주변 날씨 등을 적어 보세요." class="mt-2 w-full resize-y rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white placeholder:text-slate-600"></textarea>
           </label>
-
-          <p class="rounded-xl border border-blue-400/20 bg-blue-400/[.06] px-4 py-3 text-xs leading-5 text-slate-300">얼굴, 집 주소, 차량 번호처럼 개인정보가 보이지 않도록 달과 하늘 중심으로 촬영해 주세요. 위치정보는 사진 압축 과정에서 제거됩니다.</p>
 
           <div id="submitStatus" class="hidden rounded-xl px-4 py-3 text-sm font-bold" role="status" aria-live="polite"></div>
           <button id="submitButton" type="submit" class="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 py-3.5 font-black text-space-950 shadow-lg shadow-amber-500/15 transition hover:bg-amber-400 disabled:cursor-wait disabled:opacity-60">
@@ -477,6 +462,24 @@
         <button type="button" id="lateNightRestButton" onclick="restFromLateNight()" class="min-h-12 rounded-xl bg-amber-500 px-4 py-3 font-black text-space-950 hover:bg-amber-400">오늘은 쉬기</button>
         <button type="button" id="lateNightStayButton" onclick="stayFromLateNight()" class="min-h-12 rounded-xl border border-space-600 bg-space-900 px-4 py-3 font-bold text-slate-200 hover:border-space-500">이미 찍은 사진 올리기</button>
       </div>
+    </div>
+  </div>
+
+  <div id="compassIntroDialog" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/85 p-4 backdrop-blur" role="dialog" aria-modal="true" aria-labelledby="compassIntroTitle" aria-describedby="compassIntroDescription">
+    <div class="relative w-full max-w-md overflow-y-auto rounded-3xl border border-blue-400/35 bg-space-800 p-3 shadow-card" style="max-height: calc(100dvh - 2rem)">
+      <button type="button" id="compassIntroCloseButton" onclick="dismissCompassIntro()" class="absolute right-5 top-5 z-10 grid h-10 w-10 place-items-center rounded-full bg-black/70 text-xl font-bold text-white shadow-lg hover:bg-black/90" aria-label="보정 안내 닫기">×</button>
+      <h3 id="compassIntroTitle" class="sr-only">나침반을 사용하기 전에 보정해 주세요</h3>
+      <div id="compassIntroDescription" class="sr-only">
+        <p>아래 순서대로 움직이면 달의 방향을 더 정확하게 찾을 수 있어요.</p>
+        <ol>
+          <li>자석이나 금속 물건에서 떨어져요.</li>
+          <li>휴대폰을 세로로 들고 작은 숫자 8을 그리며 천천히 움직여요.</li>
+          <li>화면이 하늘을 향하도록 휴대폰을 평평하게 들어요.</li>
+          <li>나침반에 표시된 방위를 보고 휴대폰 위쪽이 그 방향을 가리키게 몸을 돌려요.</li>
+        </ol>
+      </div>
+      <img src="/compass-calibration-guide.jpg" alt="" width="1024" height="1536" decoding="async" class="block h-auto w-full rounded-2xl" aria-hidden="true">
+      <button type="button" id="compassIntroStartButton" onclick="confirmCompassIntro()" class="mt-3 min-h-12 w-full rounded-xl bg-amber-500 px-4 py-3.5 font-black text-space-950 shadow-lg shadow-amber-500/15 hover:bg-amber-400">알겠어요, 나침반 시작</button>
     </div>
   </div>
 
@@ -572,9 +575,9 @@
     const COMPASS_GATE_MAX_SPREAD_DEG = 12;
     const COMPASS_GATE_WAIT_MS = 1200;
     const COMPASS_GATE_GIVEUP_MS = 4000;
-    const COMPASS_GATE_COACH_MS = 4000;
     let lateNightDialogShownThisLoad = false;
     let lateNightDialogPreviousFocus = null;
+    let compassIntroPreviousFocus = null;
     let compassPanelOpen = false;
     let orientationHandler = null;
     let orientationEventName = '';
@@ -593,8 +596,6 @@
     let compassGatePassed = false;
     let compassGateElapsedMs = 0;
     let compassGateDegrees = [];
-    let compassGateCoachTimer = null;
-    let compassGateCoachShown = false;
     const COMPASS_GATE_MESSAGE = '휴대폰을 금속 물건에서 떨어뜨리고, 숫자 8을 그리듯 천천히 움직여 주세요';
 
     const MoonEngine = (() => {
@@ -900,6 +901,14 @@
       });
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
+          if (isCompassIntroOpen()) {
+            dismissCompassIntro();
+            return;
+          }
+          if (compassPanelOpen) {
+            closeCompass();
+            return;
+          }
           if (isLateNightDialogOpen()) {
             stayFromLateNight();
             return;
@@ -907,6 +916,7 @@
           closeLightbox(event, true);
           stopCamera();
         }
+        trapCompassIntroFocus(event);
         trapLateNightFocus(event);
       });
     });
@@ -1070,13 +1080,11 @@
       document.title = titleText;
       const appTitle = document.getElementById('studentAppTitle');
       const header = document.getElementById('studentClassHeaderLabel');
-      const submitLabel = document.getElementById('submitClassLabel');
       const calendarLabel = document.getElementById('moonCalendarLabel');
       const locationNote = document.getElementById('locationNote');
       const footerBrand = document.getElementById('footerBrand');
       if (appTitle) appTitle.textContent = titleText;
       if (header) header.textContent = headerText;
-      if (submitLabel) submitLabel.textContent = currentClassLabel;
       if (calendarLabel) calendarLabel.textContent = authenticated ? `${currentRegionShortLabel} 하늘 달력` : '하늘 달력';
       if (locationNote) {
         locationNote.textContent = authenticated
@@ -1164,10 +1172,10 @@
         button.classList.toggle('cursor-not-allowed', !hasClassSession);
       });
       banner.className = hasClassSession
-        ? 'mb-5 rounded-2xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-3 text-sm font-bold text-emerald-100'
+        ? 'mb-5 rounded-2xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-3 text-sm font-bold leading-6 text-emerald-100'
         : 'mb-5 rounded-2xl border border-blue-400/20 bg-blue-400/[.07] px-4 py-3 text-sm leading-6 text-blue-100';
       banner.textContent = hasClassSession
-        ? '✓ 수업 참여가 확인되었습니다. 사진 제출과 우리 반 갤러리를 이용할 수 있어요.'
+        ? `✓ ${currentClassLabel} 수업 참여가 확인되었습니다. 사진 제출과 우리 반 갤러리를 이용할 수 있어요. 사진은 수업용 비공개 저장소에 안전하게 보관됩니다.`
         : sessionCheckNeedsRetry
           ? '카메라 사용 중 수업 참여 확인이 잠시 멈췄어요. 화면으로 돌아오면 자동으로 다시 확인합니다.'
           : '달 정보는 자유롭게 볼 수 있어요. 사진 제출과 우리 반 갤러리는 선생님이 안내한 수업 QR로 입장해 주세요.';
@@ -2110,6 +2118,59 @@
       }
     }
 
+    function isCompassIntroOpen() {
+      const dialog = document.getElementById('compassIntroDialog');
+      return Boolean(dialog && dialog.classList && !dialog.classList.contains('hidden'));
+    }
+
+    function showCompassIntro() {
+      compassIntroPreviousFocus = document.activeElement || null;
+      const dialog = document.getElementById('compassIntroDialog');
+      if (dialog && dialog.classList) {
+        dialog.classList.remove('hidden');
+        dialog.classList.add('flex');
+      }
+      setBodyScrollLocked(true);
+      const start = document.getElementById('compassIntroStartButton');
+      if (start && typeof start.focus === 'function') start.focus();
+    }
+
+    function closeCompassIntro() {
+      const dialog = document.getElementById('compassIntroDialog');
+      if (dialog && dialog.classList) {
+        dialog.classList.add('hidden');
+        dialog.classList.remove('flex');
+      }
+      setBodyScrollLocked(false);
+      if (compassIntroPreviousFocus && typeof compassIntroPreviousFocus.focus === 'function') {
+        compassIntroPreviousFocus.focus();
+      }
+      compassIntroPreviousFocus = null;
+    }
+
+    function dismissCompassIntro() {
+      closeCompassIntro();
+    }
+
+    async function confirmCompassIntro() {
+      closeCompassIntro();
+      await startCompass();
+    }
+
+    function trapCompassIntroFocus(event) {
+      if (!isCompassIntroOpen() || event.key !== 'Tab') return;
+      const close = document.getElementById('compassIntroCloseButton');
+      const start = document.getElementById('compassIntroStartButton');
+      if (!close || !start) return;
+      if (event.shiftKey && document.activeElement === close) {
+        event.preventDefault();
+        start.focus();
+      } else if (!event.shiftKey && document.activeElement === start) {
+        event.preventDefault();
+        close.focus();
+      }
+    }
+
     function normalizeDegrees(value) {
       return ((value % 360) + 360) % 360;
     }
@@ -2274,22 +2335,6 @@
       compassGatePassed = false;
       compassGateElapsedMs = 0;
       compassGateDegrees = [];
-      compassGateCoachShown = false;
-      if (compassGateCoachTimer) {
-        clearTimeout(compassGateCoachTimer);
-        compassGateCoachTimer = null;
-      }
-    }
-
-    // 화면을 계속 보고 있으면 '8자 그리기' 안내를 잊기 쉬워서, 조금 지나면 자세 카드로 한 번 더 알려 줍니다.
-    function scheduleCompassCoach() {
-      if (compassGateCoachTimer || compassGateCoachShown) return;
-      compassGateCoachTimer = setTimeout(() => {
-        compassGateCoachTimer = null;
-        if (!compassPanelOpen || compassGatePassed) return;
-        compassGateCoachShown = true;
-        setCompassPosture(COMPASS_GATE_MESSAGE);
-      }, COMPASS_GATE_COACH_MS);
     }
 
     // 자세가 평평한 동안 모은 방위가 서로 비슷하면 센서가 안정됐다고 봅니다.
@@ -2352,10 +2397,6 @@
         clearTimeout(compassSensorTimer);
         compassSensorTimer = null;
       }
-      if (compassGateCoachTimer) {
-        clearTimeout(compassGateCoachTimer);
-        compassGateCoachTimer = null;
-      }
       compassGateActive = false;
       pauseCompass('나침반 안내를 멈췄어요');
     }
@@ -2367,8 +2408,7 @@
       resetCompassGate();
       applyCompassTarget(getCompassTarget());
       pauseCompass(COMPASS_GATE_MESSAGE);
-      setCompassPosture('화면이 위를 향하게 쟁반처럼 평평하게 들고, 금속 물건에서 떨어져요.');
-      scheduleCompassCoach();
+      setCompassPosture('화면이 위를 향하게 쟁반처럼 평평하게 들어요.');
       setCompassStatus('');
       let lastEventAt = null;
       const handler = (event) => {
@@ -2419,7 +2459,7 @@
         if (compassScreenAngle !== screenOrientationAngle()) compassHeading = null;
         compassScreenAngle = screenOrientationAngle();
         compassHeading = compassHeading === null ? heading : normalizeDegrees(compassHeading + shortestDegDelta(heading, compassHeading) * 0.3);
-        setCompassPosture('화면이 위를 향하게 쟁반처럼 평평하게 들고, 금속 물건에서 떨어져요.');
+        setCompassPosture('화면이 위를 향하게 쟁반처럼 평평하게 들어요.');
         setCompassStatus('');
         updateCompassGuidance(compassHeading);
       };
@@ -2444,32 +2484,32 @@
       compassPanelOpen = false;
       stopOrientationListening();
       toggleHidden('compassPanel', true);
+      setBodyScrollLocked(false);
       const button = document.getElementById('openCompassButton');
-      if (button) {
-        button.textContent = '나침반 열기';
-        if (typeof button.setAttribute === 'function') button.setAttribute('aria-expanded', 'false');
-      }
+      if (button && typeof button.focus === 'function') button.focus();
     }
 
-    // 센서 권한은 나침반 버튼을 누른 클릭 안에서만 요청합니다.
+    // 센서 권한은 보정법을 읽고 '나침반 시작'을 누른 클릭 안에서만 요청합니다.
     async function openCompass() {
       if (compassPanelOpen) {
         closeCompass();
         return;
       }
+      showCompassIntro();
+    }
+
+    async function startCompass() {
       compassPanelOpen = true;
       toggleHidden('compassPanel', false);
-      const button = document.getElementById('openCompassButton');
-      if (button) {
-        button.textContent = '나침반 닫기';
-        if (typeof button.setAttribute === 'function') button.setAttribute('aria-expanded', 'true');
-      }
+      setBodyScrollLocked(true);
+      const close = document.getElementById('closeCompassButton');
+      if (close && typeof close.focus === 'function') close.focus();
       applyCompassTarget(getCompassTarget());
       pauseCompass(COMPASS_GATE_MESSAGE);
       setCompassStatus('');
 
       if (typeof DeviceOrientationEvent === 'undefined') {
-        pauseCompass('방위 그림으로 동·서·남·북을 익혀 봐요');
+        pauseCompass('');
         setCompassStatus('이 기기는 방향 센서를 지원하지 않아요');
         return;
       }
@@ -2482,7 +2522,7 @@
         }
         if (!compassPanelOpen) return;
         if (permission !== 'granted') {
-          pauseCompass('방위 그림으로 동·서·남·북을 익혀 봐요');
+          pauseCompass('');
           setCompassStatus('방향 센서 사용을 허용하지 않아서 화살표는 움직이지 않아요');
           return;
         }

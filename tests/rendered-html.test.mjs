@@ -254,12 +254,14 @@ test("renders the student-facing class name from the active session", async () =
   const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
   const sessionRoute = await readFile(new URL("../app/api/session/route.ts", import.meta.url), "utf8");
   assert.match(html, /id="studentClassHeaderLabel"[^>]*>📍 관찰 지역 기준 · 수업 참여 전</);
-  assert.match(html, /id="submitClassLabel"[^>]*>우리 반</);
+  assert.doesNotMatch(html, /id="submitClassLabel"/);
   assert.match(html, /const DEFAULT_CLASS_LABEL = '우리 반'/);
   assert.match(html, /function setClassroomContext\(context\)/);
   assert.match(html, /`\uD83D\uDCCD \$\{currentRegionShortLabel\} 기준 · \$\{currentClassLabel\}`/);
   assert.match(html, /`\u203B \$\{currentRegionShortLabel\} 기준 좌표/);
   assert.match(html, /setClassroomContext\(lastSessionContext\)/);
+  assert.match(html, /`✓ \$\{currentClassLabel\} 수업 참여가 확인되었습니다/);
+  assert.match(html, /사진은 수업용 비공개 저장소에 안전하게 보관됩니다/);
   assert.match(html, /badge\.textContent = currentClassLabel/);
   assert.match(sessionRoute, /classLabel: teacher\.classLabel/);
   assert.doesNotMatch(html, /초등 4학년 1반|<strong>4학년 1반<\/strong>|badge\.textContent = '4학년 1반'/);
@@ -337,6 +339,19 @@ test("offers external high-quality capture, in-page camera fallback, and gallery
   assert.match(html, /captureInput\.addEventListener\(['"]cancel['"], clearCameraPending\)/);
   assert.match(html, /촬영 중 화면이 다시 시작됐어요/);
   assert.doesNotMatch(html, /페이지 안 고화질 촬영/);
+});
+
+test("places the lighter compass trigger before student details and photo help after camera fallback", async () => {
+  const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
+  const privacyNotice = html.indexOf('aria-label="사진 개인정보 보호 안내"');
+  const studentNumber = html.indexOf('id="studentNumber"');
+  const cameraFallback = html.indexOf('id="cameraFallback"');
+  const compassButton = html.indexOf('id="openCompassButton"');
+  const photoPlaceholder = html.indexOf('id="photoPlaceholder"');
+
+  assert.ok(privacyNotice > -1 && privacyNotice < compassButton);
+  assert.ok(compassButton < studentNumber);
+  assert.ok(cameraFallback > -1 && cameraFallback < photoPlaceholder);
 });
 
 test("allows larger compressed photos for high-quality camera uploads", async () => {

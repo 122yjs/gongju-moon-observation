@@ -98,7 +98,7 @@ function loadStudentPage(overrides = {}) {
     ...overrides,
   };
   context.window = context;
-  ["lateNightDialog", "compassPanel", "observationGuidanceDetail", "observationGuidanceNext", "compassStatus"].forEach(
+  ["lateNightDialog", "compassIntroDialog", "compassPanel", "observationGuidanceDetail", "observationGuidanceNext", "compassStatus"].forEach(
     (id) => element(id).classList.add("hidden"),
   );
 
@@ -106,7 +106,7 @@ function loadStudentPage(overrides = {}) {
     `${script}
 hasClassSession = true;
 globalThis.api = {
-  MoonEngine, showView, openCompass, closeCompass, maybeShowLateNightDialog,
+  MoonEngine, showView, openCompass, closeCompass, confirmCompassIntro, dismissCompassIntro, maybeShowLateNightDialog,
   restFromLateNight, stayFromLateNight, renderToday, renderSubmitObservationSupport,
   compassHeadingFromEuler, headingFromOrientationEvent, compassTilt, applyCompassTarget,
   compassCircularMean, compassSpreadDegrees,
@@ -258,13 +258,28 @@ test("late-night dialog appears once per page load", () => {
   assert.equal(page.api.maybeShowLateNightDialog(now), false);
 });
 
-test("sensor permission is requested only after the compass button click", async () => {
+test("every compass start shows calibration help before requesting sensor permission", async () => {
+  assert.match(html, /나침반을 사용하기 전에 보정해 주세요/);
+  assert.match(html, /<img[^>]+src="\/compass-calibration-guide\.jpg"[^>]+width="1024"[^>]+height="1536"/);
+  assert.match(html, /자석이나 금속 물건에서 떨어져요/);
+  assert.match(html, /휴대폰 위쪽이 그 방향을 가리키게 몸을 돌려요/);
+  assert.doesNotMatch(html, /처음 한 번만 보정해 주세요/);
   const page = loadStudentPage();
   assert.equal(page.permissionCalls.count, 0);
   page.api.showView("submit");
   assert.equal(page.permissionCalls.count, 0);
   await page.api.openCompass();
+  assert.equal(page.element("compassIntroDialog").classList.contains("hidden"), false);
+  assert.equal(page.permissionCalls.count, 0);
+  await page.api.confirmCompassIntro();
+  assert.equal(page.element("compassIntroDialog").classList.contains("hidden"), true);
   assert.equal(page.permissionCalls.count, 1);
+  page.api.closeCompass();
+  await page.api.openCompass();
+  assert.equal(page.element("compassIntroDialog").classList.contains("hidden"), false);
+  assert.equal(page.permissionCalls.count, 1);
+  await page.api.confirmCompassIntro();
+  assert.equal(page.permissionCalls.count, 2);
   const beforeOpen = script.split("async function openCompass")[0];
   assert.doesNotMatch(beforeOpen, /requestPermission/);
 });
@@ -273,6 +288,7 @@ test("compass errors keep static direction text and leave photo submission enabl
   const unsupported = loadStudentPage({ DeviceOrientationEvent: undefined });
   unsupported.element("submitButton").disabled = false;
   await unsupported.api.openCompass();
+  await unsupported.api.confirmCompassIntro();
   assert.equal(unsupported.element("submitButton").disabled, false);
   assert.match(unsupported.element("compassStatus").textContent, /지원하지 않/);
   assert.ok(unsupported.element("compassStaticDirection").textContent.length > 0);
@@ -287,6 +303,7 @@ test("compass errors keep static direction text and leave photo submission enabl
   });
   denied.element("submitButton").disabled = false;
   await denied.api.openCompass();
+  await denied.api.confirmCompassIntro();
   assert.equal(denied.element("submitButton").disabled, false);
   assert.match(denied.element("compassStatus").textContent, /허용하지 않아서/);
   assert.ok(denied.element("compassStaticDirection").textContent.length > 0);
@@ -299,6 +316,7 @@ test("compass errors keep static direction text and leave photo submission enabl
   });
   noSensor.element("submitButton").disabled = false;
   await noSensor.api.openCompass();
+  await noSensor.api.confirmCompassIntro();
   assert.equal(noSensor.element("submitButton").disabled, false);
   assert.match(noSensor.element("compassStatus").textContent, /센서 값/);
 });
@@ -363,6 +381,7 @@ async function connectedCompassPage() {
     clearTimeout(id) { timers.delete(id); },
   });
   await page.api.openCompass();
+  await page.api.confirmCompassIntro();
   page.api.applyCompassTarget({ compassDeg: 90, altitude: 30, label: '지금 달이 있는 쪽' });
   const emit = (event = {}) => {
     // 보정은 값이 비슷한 채로 약 1.2초가 흘러야 끝납니다. 시험에서는 시계를 조금 앞으로 밉니다.
@@ -397,6 +416,13 @@ test("나침반을 열면 바로 방위를 말하지 않고 숫자 8 보정 안�
   assert.ok(moon && Math.abs(Number(moon[1]) - 140) < 1 && Math.abs(Number(moon[2]) - 70) < 1, `moon ${page.element('compassMoon').getAttribute('transform')}`);
   assert.match(page.element('compassFacingLabel').textContent, /동쪽/);
   assert.match(page.element('compassInstruction').textContent, /올려다봐요/);
+});
+
+test("나침반 보정 안내를 자세 카드에 중복해서 보여 주지 않는다", async () => {
+  const page = await connectedCompassPage();
+  const firstPendingTimer = [...page.timers.values()][0];
+  firstPendingTimer();
+  assert.notEqual(page.element('compassInstruction').textContent, page.element('compassPosture').textContent);
 });
 
 test("세움·뒤집음·자세 누락에서는 실시간 안내를 지우고 다시 눕히면 복구한다", async () => {
