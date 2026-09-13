@@ -58,6 +58,12 @@
       border-top-color: currentColor; border-radius: 999px; animation: spin .7s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .compass-dial { display: block; width: 100%; max-width: 300px; height: auto; margin: 0 auto; }
+    /* 안내 문구가 한 줄에서 두 줄로 바뀌어도 카드 높이가 흔들리지 않게 자리를 미리 잡아 둡니다. */
+    .compass-instruction { min-height: 3.5rem; }
+    .compass-calibrate-hint { display: none; }
+    .compass-calibrate-hint:not(.hidden) { display: flex; }
+    .compass-dial.compass-calibrating { opacity: .45; }
     @media (max-width: 480px) { .calendar-cell { min-height: 4.2rem; } }
     @media (prefers-reduced-motion: reduce) {
       .view-panel, .moon-glow, .spinner { animation: none !important; }
@@ -213,19 +219,138 @@
           </article>
         </div>
         <div class="mt-4">
-          <button type="button" id="openCompassButton" onclick="openCompass()" aria-expanded="false" aria-controls="compassPanel" class="min-h-11 w-full rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-3 font-black text-amber-100 hover:border-amber-300">나침반 열기</button>
-          <div id="compassPanel" class="mt-3 hidden rounded-2xl border border-space-600 bg-space-900/80 p-4">
-            <p id="compassTargetLabel" class="text-center text-sm font-black text-amber-200">달 방향</p>
-            <svg viewBox="0 0 100 100" class="mx-auto mt-3 h-36 w-36" role="img" aria-label="달 방향 나침반">
-              <circle cx="50" cy="50" r="46" fill="#0b0e17" stroke="#f59e0b" stroke-width="2"></circle>
-              <text x="50" y="18" text-anchor="middle" fill="#94a3b8" font-size="8">앞</text>
-              <g id="compassArrow">
-                <polygon points="50,16 61,72 50,60 39,72" fill="#fbbf24"></polygon>
-              </g>
-            </svg>
-            <p id="compassStaticDirection" class="mt-2 text-center text-lg font-black text-white"></p>
-            <p class="mt-2 text-center text-xs leading-5 text-slate-500">기기 센서에 따라 방향이 조금 다를 수 있어요</p>
-            <p id="compassStatus" class="mt-2 hidden text-center text-sm font-bold text-amber-100" role="status"></p>
+          <button type="button" id="openCompassButton" onclick="openCompass()" aria-expanded="false" aria-controls="compassPanel" class="flex items-center justify-center gap-2 min-h-12 w-full rounded-2xl border border-amber-400/35 bg-gradient-to-r from-amber-500/10 via-amber-400/15 to-amber-500/10 px-5 py-3.5 font-black text-amber-200 shadow-lg shadow-amber-500/5 transition hover:border-amber-300 hover:bg-amber-400/20 active:scale-[0.99]">
+            <span class="text-lg" aria-hidden="true">🧭</span>
+            <span>나침반 열기</span>
+          </button>
+          <div id="compassPanel" class="mt-4 hidden rounded-3xl border border-indigo-500/25 bg-gradient-to-b from-space-900/95 via-space-950/90 to-space-950 p-5 sm:p-6 shadow-2xl backdrop-blur-2xl relative overflow-hidden">
+            <div class="pointer-events-none absolute -top-20 -left-20 h-44 w-44 rounded-full bg-amber-500/10 blur-3xl" aria-hidden="true"></div>
+            <div class="pointer-events-none absolute -bottom-20 -right-20 h-44 w-44 rounded-full bg-blue-500/10 blur-3xl" aria-hidden="true"></div>
+            
+            <div class="flex flex-col items-center gap-1.5 border-b border-white/10 pb-3 text-center">
+              <div class="inline-flex items-center gap-2 whitespace-nowrap rounded-full border border-amber-400/30 bg-amber-400/10 px-3.5 py-1 text-xs font-bold text-amber-200 shadow-sm">
+                <span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                <span id="compassTargetLabel">지금 달이 있는 쪽</span>
+                <span class="text-white font-black" id="compassStaticDirection"></span>
+              </div>
+              <p id="compassModeLabel" class="text-[11px] font-medium text-slate-400 break-keep">북쪽을 위에 놓은 학습 그림 · 실제 방향과 연결 전</p>
+            </div>
+
+            <div class="my-4 flex justify-center">
+              <div class="relative">
+              <!-- 보정 중에는 실제 방위 대신 '몸을 돌리면 방위판도 따라 돈다'는 모습만 크게 보여 줍니다. -->
+              <p id="compassCalibrateHint" class="compass-calibrate-hint hidden pointer-events-none absolute inset-0 z-10 flex-col items-center justify-center gap-1.5 rounded-full bg-space-950/80 px-8 text-center backdrop-blur-[2px]">
+                <span class="text-3xl select-none" aria-hidden="true">✍️</span>
+                <span class="text-sm font-black text-amber-200 break-keep">나침반 준비 중</span>
+                <span class="text-[11px] font-medium leading-4 text-slate-300 break-keep">움직이는 대로 방위판이 돌아요</span>
+              </p>
+              <svg id="compassDial" viewBox="0 0 280 280" class="compass-dial drop-shadow-[0_12px_30px_rgba(0,0,0,0.6)]" role="img" aria-label="북쪽을 위에 놓은 동서남북 학습 그림">
+                <defs>
+                  <radialGradient id="dialBg" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stop-color="#141c2e"/>
+                    <stop offset="85%" stop-color="#090d16"/>
+                    <stop offset="100%" stop-color="#05070c"/>
+                  </radialGradient>
+                  <linearGradient id="needleN" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stop-color="#fb7185"/>
+                    <stop offset="100%" stop-color="#e11d48"/>
+                  </linearGradient>
+                  <linearGradient id="needleS" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stop-color="#94a3b8"/>
+                    <stop offset="100%" stop-color="#64748b"/>
+                  </linearGradient>
+                  <linearGradient id="moonGold" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#fef08a"/>
+                    <stop offset="100%" stop-color="#f59e0b"/>
+                  </linearGradient>
+                  <filter id="moonGlow" x="-30%" y="-30%" width="160%" height="160%">
+                    <feGaussianBlur stdDeviation="3" result="blur"/>
+                    <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+                  </filter>
+                </defs>
+                <!-- 다이얼 외곽 및 배경 -->
+                <circle cx="140" cy="140" r="124" fill="none" stroke="#334155" stroke-width="1" stroke-opacity="0.4"></circle>
+                <circle cx="140" cy="140" r="114" fill="url(#dialBg)" stroke="#475569" stroke-width="2"></circle>
+                <circle cx="140" cy="140" r="114" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-opacity="0.3" stroke-dasharray="2 6"></circle>
+                <circle cx="140" cy="140" r="70" fill="none" stroke="#334155" stroke-width="1" stroke-dasharray="3 3" stroke-opacity="0.5"></circle>
+
+                <!-- 회전하는 나침반 눈금 및 바늘 -->
+                <g id="compassRose">
+                  <!-- 방위 눈금 -->
+                  <g stroke="#64748b" stroke-width="1.5" stroke-linecap="round" opacity="0.8">
+                    <path d="M140 28v10 M252 140h-10 M140 252v-10 M28 140h10"></path>
+                    <path d="M60 60l7 7 M220 60l-7 7 M220 220l-7-7 M60 220l7-7" stroke-width="1"></path>
+                    <!-- 30도 간격 미세 눈금 -->
+                    <path d="M196 43l-4 7 M237 84l-7 4 M237 196l-7-4 M196 237l-4-7 M84 237l4-7 M43 196l7-4 M43 84l7-4 M84 43l4 7" stroke="#475569" stroke-width="1" opacity="0.6"></path>
+                  </g>
+                  <!-- 서브 로즈 장식 (8방위 별) -->
+                  <polygon points="140,95 144,136 185,140 144,144 140,185 136,144 95,140 136,136" fill="#1e293b" opacity="0.6"></polygon>
+                  <!-- 나침반 바늘 (북/남 입체 셰이딩) -->
+                  <polygon points="140,80 148,140 140,140" fill="url(#needleN)"></polygon>
+                  <polygon points="140,80 132,140 140,140" fill="#f43f5e"></polygon>
+                  <polygon points="140,200 148,140 140,140" fill="url(#needleS)"></polygon>
+                  <polygon points="140,200 132,140 140,140" fill="#475569"></polygon>
+                </g>
+
+                <!-- 고정 텍스트 4방위 라벨 (JS에서 x, y 계산 업데이트) -->
+                <text id="compassNorth" x="140" y="48" text-anchor="middle" dominant-baseline="central" fill="#fb7185" font-size="20" font-weight="900" font-family="system-ui, -apple-system, sans-serif">북</text>
+                <text id="compassEast" x="232" y="140" text-anchor="middle" dominant-baseline="central" fill="#e2e8f0" font-size="20" font-weight="900" font-family="system-ui, -apple-system, sans-serif">동</text>
+                <text id="compassSouth" x="140" y="232" text-anchor="middle" dominant-baseline="central" fill="#e2e8f0" font-size="20" font-weight="900" font-family="system-ui, -apple-system, sans-serif">남</text>
+                <text id="compassWest" x="48" y="140" text-anchor="middle" dominant-baseline="central" fill="#e2e8f0" font-size="20" font-weight="900" font-family="system-ui, -apple-system, sans-serif">서</text>
+
+                <!-- 달 마커 -->
+                <g id="compassMoon" visibility="hidden" filter="url(#moonGlow)">
+                  <circle r="16" fill="url(#moonGold)" stroke="#090d16" stroke-width="2.5"></circle>
+                  <circle cx="5" cy="-5" r="3.5" fill="#f59e0b" opacity="0.3"></circle>
+                  <circle cx="-4" cy="4" r="2.5" fill="#f59e0b" opacity="0.3"></circle>
+                  <text text-anchor="middle" dominant-baseline="central" fill="#090d16" font-size="13" font-weight="900" font-family="system-ui, -apple-system, sans-serif">달</text>
+                </g>
+
+                <!-- 중앙 관찰자 ("나") -->
+                <circle cx="140" cy="140" r="18" fill="#1e293b" stroke="#3b82f6" stroke-width="2" stroke-opacity="0.8"></circle>
+                <circle cx="140" cy="140" r="14" fill="#0f172a"></circle>
+                <text x="140" y="140" text-anchor="middle" dominant-baseline="central" fill="#93c5fd" font-size="12" font-weight="800" font-family="system-ui, -apple-system, sans-serif">나</text>
+
+                <!-- 내 앞 조준 가이드 -->
+                <g id="compassFront" visibility="hidden" fill="#38bdf8">
+                  <text x="140" y="12" text-anchor="middle" font-size="11" font-weight="700" fill="#38bdf8">내 앞 · 화면 위쪽</text>
+                  <path d="M140 17l-4 6h8z"></path>
+                </g>
+              </svg>
+              </div>
+            </div>
+
+            <!-- 직관적인 스마트 안내 카드 -->
+            <div class="mt-2 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-center backdrop-blur-md shadow-inner break-keep">
+              <div class="flex items-center justify-center gap-1.5 text-xs font-bold text-slate-300">
+                <span class="inline-block h-1.5 w-1.5 rounded-full bg-blue-400"></span>
+                <span id="compassFacingLabel">빨간 바늘은 북쪽을 가리켜요</span>
+              </div>
+              <p id="compassInstruction" class="compass-instruction mt-2 flex items-center justify-center text-lg sm:text-xl font-black text-amber-200" role="status">휴대폰 방향을 확인하고 있어요</p>
+              <p id="compassHeightHint" class="mt-1.5 text-xs font-medium text-slate-400"></p>
+            </div>
+
+            <!-- 자세 가이드 카드 -->
+            <div class="mt-3 flex items-start gap-2.5 rounded-2xl border border-blue-400/20 bg-blue-500/[0.07] p-3.5 text-left text-xs leading-relaxed text-blue-100">
+              <span class="text-base select-none shrink-0" aria-hidden="true">📱</span>
+              <p id="compassPosture" class="m-0 text-blue-100 break-keep">화면이 위를 향하게 쟁반처럼 평평하게 들고, 금속 물건에서 떨어져요.</p>
+            </div>
+
+            <p id="compassStatus" class="mt-2.5 hidden rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-2.5 text-center text-xs font-bold text-rose-200" role="status"></p>
+
+            <!-- 동서남북 원리 학습 아코디언 -->
+            <details class="group mt-3 rounded-2xl border border-white/10 bg-white/[0.02] p-3.5 text-xs leading-relaxed text-slate-300 transition hover:border-white/20 break-keep">
+              <summary class="flex cursor-pointer list-none items-center justify-between font-bold text-slate-200">
+                <span>🧭 동·서·남·북은 어떻게 읽을까요?</span>
+                <span class="transition group-open:rotate-180 text-slate-400" aria-hidden="true">▾</span>
+              </summary>
+              <div class="mt-2.5 space-y-2 border-t border-white/5 pt-2.5 text-slate-300">
+                <p>북쪽을 바라보면 오른쪽은 동쪽, 뒤쪽은 남쪽, 왼쪽은 서쪽이에요. 내가 돌아도 북쪽은 같은 쪽에 있어요. 그래서 나침반의 방위판이 반대로 돌아요.</p>
+                <p>노란 ‘달’ 표시는 달이 있는 쪽이에요. 원 아래에 있으면 땅속이 아니라 내 뒤쪽이라는 뜻이에요. 달의 높이는 나침반 아래 안내를 읽어요.</p>
+              </div>
+            </details>
+            
+            <p class="mt-3 text-center text-[11px] text-slate-500">기기 센서에 따라 방향이 조금 다를 수 있어요</p>
           </div>
         </div>
 
@@ -439,6 +564,15 @@
       hard: 'mt-2 text-sm leading-6 text-amber-50'
     };
     const COMPASS_SENSOR_WAIT_MS = 2500;
+    // 나침반을 열면 바로 방위를 알려 주지 않고, 센서가 안정됐는지 짧게 살펴봅니다.
+    const COMPASS_GATE_WARMUP_SAMPLES = 6;
+    const COMPASS_GATE_MIN_SAMPLES = 3;
+    const COMPASS_GATE_MAX_SAMPLES = 20;
+    // 자북을 찾는 데 흔들림이 이 정도 안이면 같은 방향을 가리킨다고 봅니다.
+    const COMPASS_GATE_MAX_SPREAD_DEG = 12;
+    const COMPASS_GATE_WAIT_MS = 1200;
+    const COMPASS_GATE_GIVEUP_MS = 4000;
+    const COMPASS_GATE_COACH_MS = 4000;
     let lateNightDialogShownThisLoad = false;
     let lateNightDialogPreviousFocus = null;
     let compassPanelOpen = false;
@@ -449,6 +583,19 @@
     let orientationEventCount = 0;
     let usableHeadingCount = 0;
     let compassTargetDeg = null;
+    let compassTarget = null;
+    let compassTargetUpdatedAt = 0;
+    let compassHeading = null;
+    let compassAligned = false;
+    let compassPostureReady = false;
+    let compassScreenAngle = 0;
+    let compassGateActive = false;
+    let compassGatePassed = false;
+    let compassGateElapsedMs = 0;
+    let compassGateDegrees = [];
+    let compassGateCoachTimer = null;
+    let compassGateCoachShown = false;
+    const COMPASS_GATE_MESSAGE = '휴대폰을 금속 물건에서 떨어뜨리고, 숫자 8을 그리듯 천천히 움직여 주세요';
 
     const MoonEngine = (() => {
       const PI = Math.PI;
@@ -657,6 +804,72 @@
         return result;
       }
 
+      function dayNoon(date, offsetDays) {
+        return new Date(date.getFullYear(), date.getMonth(), date.getDate() + offsetDays, 12);
+      }
+
+      function uniqueSortedTimes(dates) {
+        const byTime = new Map();
+        dates.forEach((date) => {
+          if (date && !Number.isNaN(date.getTime())) byTime.set(date.getTime(), date);
+        });
+        return [...byTime.values()].sort((left, right) => left.getTime() - right.getTime());
+      }
+
+      function nearbyMoonEvents(dayDate, lat, lng) {
+        const rises = [];
+        const sets = [];
+        for (let offset = -2; offset <= 2; offset += 1) {
+          const times = getMoonTimes(dayNoon(dayDate, offset), lat, lng);
+          if (times.rise) rises.push(times.rise);
+          if (times.set) sets.push(times.set);
+        }
+        return { rises: uniqueSortedTimes(rises), sets: uniqueSortedTimes(sets) };
+      }
+
+      function lastAtOrBefore(dates, limit) {
+        let found = null;
+        dates.forEach((date) => {
+          if (date.getTime() <= limit.getTime()) found = date;
+        });
+        return found;
+      }
+
+      function firstAfter(dates, limit) {
+        return dates.find((date) => date.getTime() > limit.getTime()) || null;
+      }
+
+      // 학생에게 날짜 D는 '그날 저녁에 시작해서 밤 12시가 지나도 이어지는 하룻밤'입니다.
+      // 17:00에 달이 있으면 그 달이 뜬 시각~지는 시각, 없으면 저녁 이후 첫 월출과 그다음 월몰을 보여 줍니다.
+      function resolveMoonEvents(dayDate, lat, lng) {
+        const evening = new Date(
+          dayDate.getFullYear(),
+          dayDate.getMonth(),
+          dayDate.getDate(),
+          Math.floor(STUDENT_EVENING_START_MINUTES / 60),
+          STUDENT_EVENING_START_MINUTES % 60,
+          0
+        );
+        const nearby = nearbyMoonEvents(dayDate, lat, lng);
+        const moonUpAtEvening = getMoonPosition(evening, lat, lng).altitude > 0;
+        let rise;
+        let set;
+        if (moonUpAtEvening) {
+          rise = lastAtOrBefore(nearby.rises, evening);
+          set = firstAfter(nearby.sets, evening);
+        } else {
+          rise = firstAfter(nearby.rises, evening);
+          set = rise ? firstAfter(nearby.sets, rise) : null;
+        }
+        const curr = getMoonTimes(dayNoon(dayDate, 0), lat, lng);
+        return {
+          rise: rise || null,
+          set: set || null,
+          alwaysUp: Boolean(curr.alwaysUp),
+          alwaysDown: Boolean(curr.alwaysDown)
+        };
+      }
+
       return {
         getMoonPosition,
         getMoonIllumination,
@@ -669,7 +882,8 @@
         decideObservationGuidance,
         findNextMoonrise,
         findNextObservationWindow,
-        isHardObservationDay
+        isHardObservationDay,
+        resolveMoonEvents
       };
     })();
 
@@ -1039,11 +1253,25 @@
       return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
     }
 
+    function formatMoonEventLabel(time) {
+      if (!time || Number.isNaN(time.getTime())) return OBSERVATION_UNAVAILABLE_LABEL;
+      return formatTime(time);
+    }
+
     function getTransit(date) {
-      const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const events = MoonEngine.resolveMoonEvents(date, currentObservationLat, currentObservationLon);
+      const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const dayEnd = new Date(dayStart.getTime() + 1440 * 60000);
+      let start = dayStart;
+      let end = dayEnd;
+      if (events.rise && events.set && events.set.getTime() > events.rise.getTime()) {
+        start = events.rise;
+        end = events.set;
+      }
       let maxAltitude = -Infinity;
       let maxTime = null;
-      for (let minute = 0; minute < 1440; minute += 2) {
+      const spanMinutes = Math.max(2, Math.round((end.getTime() - start.getTime()) / 60000));
+      for (let minute = 0; minute < spanMinutes; minute += 2) {
         const time = new Date(start.getTime() + minute * 60000);
         const altitude = MoonEngine.getMoonPosition(time, currentObservationLat, currentObservationLon).altitude;
         if (altitude > maxAltitude) {
@@ -1104,7 +1332,7 @@
       }
       const position = MoonEngine.getMoonPosition(time, currentObservationLat, currentObservationLon);
       return {
-        timeLabel: formatTime(time),
+        timeLabel: formatMoonEventLabel(time),
         direction: MoonEngine.compassDegreesToCardinal(MoonEngine.azimuthToCompassDegrees(position.azimuth))
       };
     }
@@ -1141,9 +1369,9 @@
 
     function applyClassName(el, className) {
       if (!el) return;
-      const hidden = el.classList && el.classList.contains('hidden');
+      const hidden = Boolean(el.classList && typeof el.classList.contains === 'function' && el.classList.contains('hidden'));
       el.className = className;
-      if (hidden) el.classList.add('hidden');
+      if (hidden && el.classList && typeof el.classList.add === 'function') el.classList.add('hidden');
     }
 
     function applyGuidanceCardTone(kind) {
@@ -1172,7 +1400,7 @@
 
     function renderSubmitObservationSupport(now = new Date()) {
       const noon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
-      const times = MoonEngine.getMoonTimes(noon, currentObservationLat, currentObservationLon);
+      const times = MoonEngine.resolveMoonEvents(noon, currentObservationLat, currentObservationLon);
       const transit = getTransit(noon);
       fillMoonEventFields(times, transit, {
         riseTime: 'submitMoonriseTime',
@@ -1236,7 +1464,7 @@
     function renderToday() {
       const noon = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 12);
       const illumination = MoonEngine.getMoonIllumination(noon);
-      const times = MoonEngine.getMoonTimes(noon, currentObservationLat, currentObservationLon);
+      const times = MoonEngine.resolveMoonEvents(noon, currentObservationLat, currentObservationLon);
       const transit = getTransit(noon);
       const [name, description] = phaseInfo(illumination.phase);
       const dateLabel = new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }).format(noon);
@@ -1264,8 +1492,8 @@
 
     function observationTip(phase, times) {
       if (phase < 0.05 || phase > 0.95) return '삭 무렵에는 달이 태양 가까이에 있어 맨눈으로 관찰하기 어려워요. 며칠 뒤 초승달을 기다려 보세요.';
-      if (phase < 0.5) return `차오르는 달은 해가 진 뒤 관찰하기 좋아요. 월몰 예상 시각은 ${formatTime(times.set)}입니다.`;
-      return `기우는 달은 늦은 밤이나 새벽에 더 잘 보여요. 월출 예상 시각은 ${formatTime(times.rise)}입니다.`;
+      if (phase < 0.5) return `차오르는 달은 해가 진 뒤 관찰하기 좋아요. 월몰 예상 시각은 ${formatMoonEventLabel(times.set)}입니다.`;
+      return `기우는 달은 늦은 밤이나 새벽에 더 잘 보여요. 월출 예상 시각은 ${formatMoonEventLabel(times.rise)}입니다.`;
     }
 
     function isEveningVisible(date) {
@@ -1893,6 +2121,27 @@
       return delta;
     }
 
+    // 방위는 359도와 1도가 사실상 2도 차이입니다. 숫자를 그냥 평균 내면 180도가 나오므로
+    // 나침반을 x축, y축 좌표로 바꿔 더한 뒤 다시 각도로 되돌립니다.
+    function compassCircularMean(degrees) {
+      if (!degrees.length) return null;
+      let east = 0;
+      let north = 0;
+      degrees.forEach((degree) => {
+        east += Math.sin(degree * Math.PI / 180);
+        north += Math.cos(degree * Math.PI / 180);
+      });
+      if (Math.hypot(east, north) < 1e-6) return null;
+      return normalizeDegrees(Math.atan2(east, north) * 180 / Math.PI);
+    }
+
+    // 평균에서 가장 멀리 떨어진 값까지의 각도입니다. 작을수록 손이 가만히 있었다는 뜻입니다.
+    function compassSpreadDegrees(degrees) {
+      const mean = compassCircularMean(degrees);
+      if (mean === null) return null;
+      return degrees.reduce((worst, degree) => Math.max(worst, Math.abs(shortestDegDelta(degree, mean))), 0);
+    }
+
     function screenOrientationAngle() {
       if (typeof window === 'undefined') return 0;
       if (window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number') {
@@ -1902,15 +2151,11 @@
       return 0;
     }
 
-    function compassHeadingFromEuler(alpha, beta, gamma) {
-      const safeBeta = typeof beta === 'number' ? beta : 0;
-      const safeGamma = typeof gamma === 'number' ? gamma : 0;
-      if (Math.abs(safeBeta) < 1 && Math.abs(safeGamma) < 1) {
-        return normalizeDegrees(360 - alpha);
-      }
+    function compassHeadingFromEuler(alpha, beta, gamma, screenAngle = 0) {
+      if (![alpha, beta, gamma, screenAngle].every(Number.isFinite)) return null;
       const toRad = Math.PI / 180;
-      const x = safeBeta * toRad;
-      const y = safeGamma * toRad;
+      const x = beta * toRad;
+      const y = gamma * toRad;
       const z = alpha * toRad;
       const cX = Math.cos(x);
       const cY = Math.cos(y);
@@ -1918,20 +2163,33 @@
       const sX = Math.sin(x);
       const sY = Math.sin(y);
       const sZ = Math.sin(z);
-      const vx = -cZ * sY - sZ * sX * cY;
-      const vy = -sZ * sY + cZ * sX * cY;
-      let heading = Math.atan2(vx, vy);
-      if (heading < 0) heading += 2 * Math.PI;
-      return heading * 180 / Math.PI;
+      // W3C의 Z-X-Y 회전식으로 화면 위쪽을 지면에 투영합니다. 뒷면 카메라의 방향과 구분합니다.
+      const screenX = Math.sin(screenAngle * toRad);
+      const screenY = Math.cos(screenAngle * toRad);
+      const east = (cZ * cY - sZ * sX * sY) * screenX - cX * sZ * screenY;
+      const north = (sZ * cY + cZ * sX * sY) * screenX + cZ * cX * screenY;
+      if (Math.hypot(east, north) < 0.1) return null;
+      return normalizeDegrees(Math.atan2(east, north) / toRad);
     }
 
     function headingFromOrientationEvent(event, treatAsAbsolute) {
+      if (![event.beta, event.gamma].every(Number.isFinite)) return null;
+      const angle = screenOrientationAngle();
       if (typeof event.webkitCompassHeading === 'number' && Number.isFinite(event.webkitCompassHeading)) {
-        return normalizeDegrees(event.webkitCompassHeading);
+        if (Number.isFinite(event.webkitCompassAccuracy) && (event.webkitCompassAccuracy < 0 || event.webkitCompassAccuracy > 25)) return null;
+        // Safari가 주는 기기 윗부분의 방위에 가로 화면의 상단 방향 차이만 더합니다.
+        const offset = compassHeadingFromEuler(0, event.beta, event.gamma, angle);
+        return offset === null ? null : normalizeDegrees(event.webkitCompassHeading + offset);
       }
       const usable = treatAsAbsolute || event.absolute === true;
       if (!usable || typeof event.alpha !== 'number' || !Number.isFinite(event.alpha)) return null;
-      return normalizeDegrees(compassHeadingFromEuler(event.alpha, event.beta, event.gamma) + screenOrientationAngle());
+      return compassHeadingFromEuler(event.alpha, event.beta, event.gamma, angle);
+    }
+
+    function compassTilt(event) {
+      if (![event.beta, event.gamma].every(Number.isFinite)) return null;
+      const up = Math.cos(event.beta * Math.PI / 180) * Math.cos(event.gamma * Math.PI / 180);
+      return Math.acos(Math.max(-1, Math.min(1, up))) * 180 / Math.PI;
     }
 
     function getCompassTarget(now = new Date()) {
@@ -1939,40 +2197,149 @@
       if (toAltitudeDeg(moon.altitude) >= 0) {
         return {
           compassDeg: MoonEngine.azimuthToCompassDegrees(moon.azimuth),
-          label: '지금 달 방향'
+          label: '지금 달이 있는 쪽',
+          altitude: toAltitudeDeg(moon.altitude)
         };
       }
       const rise = MoonEngine.findNextMoonrise(now, currentObservationLat, currentObservationLon);
-      if (!rise) return { compassDeg: null, label: '다음에 달이 뜰 방향' };
+      if (!rise) return { compassDeg: null, label: '다음에 달이 뜨는 쪽', altitude: null, rise: null };
       const risePos = MoonEngine.getMoonPosition(rise, currentObservationLat, currentObservationLon);
       return {
         compassDeg: MoonEngine.azimuthToCompassDegrees(risePos.azimuth),
-        label: '다음에 달이 뜰 방향'
+        label: '다음에 달이 뜨는 쪽',
+        altitude: null,
+        rise
       };
     }
 
     function setCompassStatus(message) {
-      setElementText('compassStatus', message);
+      if (document.getElementById('compassStatus').textContent !== message) setElementText('compassStatus', message);
       toggleHidden('compassStatus', !message);
     }
 
-    function rotateCompassArrow(heading) {
-      const arrow = document.getElementById('compassArrow');
-      if (!arrow || compassTargetDeg === null || typeof arrow.setAttribute !== 'function') return;
-      arrow.setAttribute('transform', `rotate(${shortestDegDelta(compassTargetDeg, heading)} 50 50)`);
+    function setCompassInstruction(message) {
+      // 센서가 반복해서 같은 값을 보내도 화면 읽기 도구는 안내를 한 번만 읽습니다.
+      if (document.getElementById('compassInstruction').textContent !== message) setElementText('compassInstruction', message);
+    }
+
+    function drawCompass(heading = null) {
+      const connected = heading !== null;
+      // 센서 값이 오기 전에는 학습 그림을 두고, 값이 온 뒤에만 보정 중으로 바꿉니다.
+      const calibrating = connected && compassGateActive && !compassGatePassed;
+      const live = connected && !calibrating;
+      const degrees = connected ? heading : 0;
+      document.getElementById('compassRose').setAttribute('transform', `rotate(${-degrees} 140 140)`);
+      ['North', 'East', 'South', 'West'].forEach((name, index) => {
+        const angle = (index * 90 - degrees) * Math.PI / 180;
+        const label = document.getElementById(`compass${name}`);
+        label.setAttribute('x', 140 + Math.sin(angle) * 92);
+        label.setAttribute('y', 140 - Math.cos(angle) * 92);
+      });
+      document.getElementById('compassFront').setAttribute('visibility', live ? 'visible' : 'hidden');
+      const moon = document.getElementById('compassMoon');
+      const moonVisible = live && compassTargetDeg !== null && Number.isFinite(compassTarget?.altitude);
+      moon.setAttribute('visibility', moonVisible ? 'visible' : 'hidden');
+      if (moonVisible) {
+        const delta = shortestDegDelta(compassTargetDeg, degrees) * Math.PI / 180;
+        moon.setAttribute('transform', `translate(${140 + Math.sin(delta) * 70} ${140 - Math.cos(delta) * 70})`);
+      }
+      const facing = live ? `내 앞은 ${MoonEngine.compassDegreesToCardinal(degrees)}이에요` : calibrating ? '움직이는 대로 방위판이 돌아요' : '빨간 바늘은 북쪽을 가리켜요';
+      setElementText('compassFacingLabel', facing);
+      setElementText('compassModeLabel', live ? '내가 돌아도 방위는 같은 쪽을 가리켜요' : calibrating ? '센서를 준비하는 중 · 실제 방향과 연결 전' : '북쪽을 위에 놓은 학습 그림 · 실제 방향과 연결 전');
+      document.getElementById('compassDial').setAttribute('aria-label', live ? `${facing}. 빨간 바늘은 북쪽입니다.${moonVisible ? ' 노란 달 표시는 달이 있는 쪽입니다.' : ''}` : calibrating ? '나침반을 준비하는 중입니다. 휴대폰을 움직이면 방위판이 함께 돌아갑니다.' : '북쪽을 위에 놓은 동서남북 학습 그림. 실제 방향과 연결되지 않았습니다.');
+      setCalibrating(calibrating);
+    }
+
+    function setCalibrating(active) {
+      toggleHidden('compassCalibrateHint', !active);
+      document.getElementById('compassDial').classList.toggle('compass-calibrating', active);
+    }
+
+    function pauseCompass(message) {
+      compassHeading = null;
+      compassAligned = false;
+      compassPostureReady = false;
+      drawCompass();
+      setCompassInstruction(message);
+    }
+
+    function setCompassPosture(message) {
+      setElementText('compassPosture', message);
+    }
+
+    // 보정이 끝나기 전에는 실제 방위를 알려 주지 않습니다. 엉뚱한 방향을 자신 있게 말하는 것보다
+    // 잠깐 기다렸다가 맞는 방향을 알려 주는 편이 안전합니다.
+    function resetCompassGate() {
+      compassGateActive = true;
+      compassGatePassed = false;
+      compassGateElapsedMs = 0;
+      compassGateDegrees = [];
+      compassGateCoachShown = false;
+      if (compassGateCoachTimer) {
+        clearTimeout(compassGateCoachTimer);
+        compassGateCoachTimer = null;
+      }
+    }
+
+    // 화면을 계속 보고 있으면 '8자 그리기' 안내를 잊기 쉬워서, 조금 지나면 자세 카드로 한 번 더 알려 줍니다.
+    function scheduleCompassCoach() {
+      if (compassGateCoachTimer || compassGateCoachShown) return;
+      compassGateCoachTimer = setTimeout(() => {
+        compassGateCoachTimer = null;
+        if (!compassPanelOpen || compassGatePassed) return;
+        compassGateCoachShown = true;
+        setCompassPosture(COMPASS_GATE_MESSAGE);
+      }, COMPASS_GATE_COACH_MS);
+    }
+
+    // 자세가 평평한 동안 모은 방위가 서로 비슷하면 센서가 안정됐다고 봅니다.
+    // 손은 미세하게 떨리므로 한 값마다 다시 세지 않고, 흔들려도 다시 맞춰 가며 모읍니다.
+    function feedCompassCalibration(heading, deltaMs) {
+      compassGateElapsedMs += deltaMs;
+      compassGateDegrees.push(heading);
+      if (compassGateDegrees.length > COMPASS_GATE_MAX_SAMPLES) compassGateDegrees.shift();
+      if (compassGateElapsedMs < COMPASS_GATE_WAIT_MS) return null;
+      const enoughSamples = compassGateDegrees.length >= COMPASS_GATE_WARMUP_SAMPLES;
+      const spread = compassGateDegrees.length >= COMPASS_GATE_MIN_SAMPLES ? compassSpreadDegrees(compassGateDegrees) : null;
+      const limit = COMPASS_GATE_MAX_SPREAD_DEG * (enoughSamples ? 1 : 2);
+      // 계속 돌리고 있어서 안정되지 않아도 영영 기다리게 두지 않고, 그때까지의 평균으로 시작합니다.
+      if ((spread !== null && spread <= limit) || compassGateElapsedMs >= COMPASS_GATE_GIVEUP_MS) {
+        return { spread, mean: compassCircularMean(compassGateDegrees) ?? heading };
+      }
+      if (spread === null || spread > COMPASS_GATE_MAX_SPREAD_DEG * 2) compassGateDegrees = [heading];
+      return null;
+    }
+
+    function updateCompassGuidance(heading) {
+      drawCompass(heading);
+      if (!Number.isFinite(compassTarget?.altitude)) {
+        setCompassInstruction('달이 아직 지평선 위에 없어요');
+        return;
+      }
+      const delta = shortestDegDelta(compassTargetDeg, heading);
+      // 경계에서 안내가 계속 바뀌지 않도록 들어갈 때와 벗어날 때의 범위를 다르게 둡니다.
+      compassAligned = Math.abs(delta) <= (compassAligned ? 20 : 12);
+      let message = '달이 있는 방향이에요! 이쪽 하늘을 올려다봐요';
+      if (!compassAligned) {
+        if (Math.abs(delta) > 150) message = '달은 내 뒤쪽에 있어요. 오른쪽으로 천천히 돌아요';
+        else message = `${delta > 0 ? '오른쪽' : '왼쪽'}으로 ${Math.abs(delta) < 40 ? '조금만 더 ' : ''}몸을 돌려요`;
+      }
+      setCompassInstruction(message);
     }
 
     function applyCompassTarget(target) {
+      compassTarget = target;
+      compassTargetUpdatedAt = Date.now();
       compassTargetDeg = typeof target.compassDeg === 'number' ? target.compassDeg : null;
       setElementText('compassTargetLabel', target.label);
       setElementText(
         'compassStaticDirection',
         compassTargetDeg === null ? OBSERVATION_UNAVAILABLE_LABEL : MoonEngine.compassDegreesToCardinal(compassTargetDeg)
       );
-      const arrow = document.getElementById('compassArrow');
-      if (arrow && typeof arrow.setAttribute === 'function') {
-        arrow.setAttribute('transform', 'rotate(0 50 50)');
-      }
+      const height = target.altitude;
+      setElementText('compassHeightHint', Number.isFinite(height)
+        ? `달의 높이: ${height < 20 ? '지평선 가까운 낮은 하늘' : height < 60 ? '하늘 중간쯤' : '머리 위쪽 높은 하늘'} · 약 ${Math.round(height)}°. 건물이나 구름에 가릴 수 있어요.`
+        : target.rise ? `${formatStudentDateTime(target.rise)}에 떠요. 지금은 방위를 익혀 봐요.` : '달이 뜨는 시각을 확인하지 못했어요.');
     }
 
     function stopOrientationListening() {
@@ -1985,24 +2352,76 @@
         clearTimeout(compassSensorTimer);
         compassSensorTimer = null;
       }
+      if (compassGateCoachTimer) {
+        clearTimeout(compassGateCoachTimer);
+        compassGateCoachTimer = null;
+      }
+      compassGateActive = false;
+      pauseCompass('나침반 안내를 멈췄어요');
     }
 
     function startOrientationListening() {
       stopOrientationListening();
       orientationEventCount = 0;
       usableHeadingCount = 0;
+      resetCompassGate();
+      applyCompassTarget(getCompassTarget());
+      pauseCompass(COMPASS_GATE_MESSAGE);
+      setCompassPosture('화면이 위를 향하게 쟁반처럼 평평하게 들고, 금속 물건에서 떨어져요.');
+      scheduleCompassCoach();
+      setCompassStatus('');
+      let lastEventAt = null;
       const handler = (event) => {
+        if (!compassPanelOpen || document.visibilityState === 'hidden') return;
         orientationEventCount += 1;
+        if (Date.now() - compassTargetUpdatedAt > 30000) applyCompassTarget(getCompassTarget());
+        if (compassSensorTimer) clearTimeout(compassSensorTimer);
+        compassSensorTimer = setTimeout(() => {
+          pauseCompass(compassGatePassed ? '휴대폰 방향을 다시 확인해 주세요' : COMPASS_GATE_MESSAGE);
+          setCompassStatus('방향 센서 값이 끊겼어요');
+        }, COMPASS_SENSOR_WAIT_MS);
+        const tilt = compassTilt(event);
+        if (tilt === null) {
+          pauseCompass(COMPASS_GATE_MESSAGE);
+          setCompassStatus('이 기기에서는 자세 정보를 받지 못했어요');
+          return;
+        }
+        if (tilt > (compassPostureReady ? 40 : 30)) {
+          pauseCompass('휴대폰을 평평하게 눕히고 다시 숫자 8을 그려 주세요');
+          setCompassPosture('화면이 하늘을 보게 평평하게 들면 방향을 다시 잡아요.');
+          setCompassStatus('휴대폰을 세우거나 뒤집으면 방향 안내를 잠시 멈춰요');
+          return;
+        }
+        const now = Date.now();
+        const elapsedMs = lastEventAt === null ? 0 : Math.min(200, now - lastEventAt);
+        lastEventAt = now;
         const treatAsAbsolute = orientationEventName === 'deviceorientationabsolute';
         const heading = headingFromOrientationEvent(event, treatAsAbsolute);
-        if (heading === null) return;
-        usableHeadingCount += 1;
-        if (compassSensorTimer) {
-          clearTimeout(compassSensorTimer);
-          compassSensorTimer = null;
+        if (heading === null) {
+          pauseCompass(COMPASS_GATE_MESSAGE);
+          setCompassStatus('방향을 정확히 읽지 못했어요. 자석이나 금속 물건에서 떨어져 다시 해 보세요');
+          return;
         }
+        usableHeadingCount += 1;
+        if (!compassGatePassed) {
+          const stable = feedCompassCalibration(heading, elapsedMs);
+          if (!stable) {
+            // 보정 중에는 방위 숫자를 읽지 않고, 몸을 움직이면 방위판이 따라 도는 모습만 보여 줍니다.
+            drawCompass(heading);
+            setCompassStatus('');
+            return;
+          }
+          // 안정됐다고 판단한 순간의 평균으로 시작해 첫 안내가 크게 튀지 않게 합니다.
+          compassGatePassed = true;
+          compassHeading = stable.mean;
+        }
+        compassPostureReady = true;
+        if (compassScreenAngle !== screenOrientationAngle()) compassHeading = null;
+        compassScreenAngle = screenOrientationAngle();
+        compassHeading = compassHeading === null ? heading : normalizeDegrees(compassHeading + shortestDegDelta(heading, compassHeading) * 0.3);
+        setCompassPosture('화면이 위를 향하게 쟁반처럼 평평하게 들고, 금속 물건에서 떨어져요.');
         setCompassStatus('');
-        rotateCompassArrow(heading);
+        updateCompassGuidance(compassHeading);
       };
       orientationHandler = handler;
       const absoluteSupported = typeof window !== 'undefined' && 'ondeviceorientationabsolute' in window;
@@ -2014,6 +2433,7 @@
       compassSensorTimer = setTimeout(() => {
         compassSensorTimer = null;
         if (usableHeadingCount > 0) return;
+        pauseCompass(COMPASS_GATE_MESSAGE);
         setCompassStatus(orientationEventCount === 0
           ? '방향 센서 값을 받지 못했어요'
           : '정확한 북쪽을 잡지 못했어요');
@@ -2045,9 +2465,11 @@
         if (typeof button.setAttribute === 'function') button.setAttribute('aria-expanded', 'true');
       }
       applyCompassTarget(getCompassTarget());
+      pauseCompass(COMPASS_GATE_MESSAGE);
       setCompassStatus('');
 
       if (typeof DeviceOrientationEvent === 'undefined') {
+        pauseCompass('방위 그림으로 동·서·남·북을 익혀 봐요');
         setCompassStatus('이 기기는 방향 센서를 지원하지 않아요');
         return;
       }
@@ -2058,7 +2480,9 @@
         } catch (_) {
           permission = 'denied';
         }
+        if (!compassPanelOpen) return;
         if (permission !== 'granted') {
+          pauseCompass('방위 그림으로 동·서·남·북을 익혀 봐요');
           setCompassStatus('방향 센서 사용을 허용하지 않아서 화살표는 움직이지 않아요');
           return;
         }

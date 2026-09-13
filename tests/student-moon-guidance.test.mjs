@@ -108,6 +108,8 @@ hasClassSession = true;
 globalThis.api = {
   MoonEngine, showView, openCompass, closeCompass, maybeShowLateNightDialog,
   restFromLateNight, stayFromLateNight, renderToday, renderSubmitObservationSupport,
+  compassHeadingFromEuler, headingFromOrientationEvent, compassTilt, applyCompassTarget,
+  compassCircularMean, compassSpreadDegrees,
   setSelectedDate(date) { selectedDate = date; },
 };
 `,
@@ -309,6 +311,155 @@ test("today view fills easy brightness labels from calculated moon data", () => 
   assert.ok(["북쪽", "동쪽", "남쪽", "서쪽", ""].includes(page.element("moonriseDirection").textContent));
 });
 
+test("눕힌 휴대폰의 화면 위쪽을 기준으로 작은 기울임과 화면 회전을 보정한다", () => {
+  const { api } = loadStudentPage();
+  for (const [alpha, expected] of [[0, 0], [90, 270], [180, 180], [270, 90]]) {
+    for (const [beta, gamma] of [[0, 0], [20, 0], [0, 20], [-15, -15]]) {
+      assert.ok(Math.abs(api.compassHeadingFromEuler(alpha, beta, gamma) - expected) < 1e-8);
+    }
+  }
+  assert.equal(api.compassHeadingFromEuler(0, 0, 20, 90), 90);
+  assert.equal(api.compassHeadingFromEuler(0, 20, 0, 270), 270);
+  assert.equal(api.compassHeadingFromEuler(0, 0, 0, 180), 180);
+  assert.equal(api.compassHeadingFromEuler(0, 90, 0), null);
+  assert.equal(api.compassHeadingFromEuler(NaN, 0, 0), null);
+  assert.equal(api.compassTilt({ beta: null, gamma: 0 }), null);
+  assert.equal(api.compassTilt({ beta: 180, gamma: 0 }), 180);
+});
+
+test("상대 방향은 거부하고 Safari의 정확도와 가로 화면 보정을 적용한다", () => {
+  const { api } = loadStudentPage({ screen: { orientation: { angle: 90 } } });
+  const pose = { alpha: 90, beta: 0, gamma: 0 };
+  assert.equal(api.headingFromOrientationEvent(pose, false), null);
+  assert.equal(api.headingFromOrientationEvent({ ...pose, absolute: true }, false), 0);
+  assert.equal(api.headingFromOrientationEvent({ ...pose, webkitCompassHeading: 270 }, false), 0);
+  for (const accuracy of [-1, 30]) {
+    assert.equal(api.headingFromOrientationEvent({ ...pose, webkitCompassHeading: 270, webkitCompassAccuracy: accuracy }, false), null);
+  }
+});
+
+function compassRoseDegrees(page) {
+  const match = page.element('compassRose').getAttribute('transform')?.match(/rotate\(([-0-9.]+)/);
+  return match ? Number(match[1]) : NaN;
+}
+
+async function connectedCompassPage() {
+  const listeners = new Map();
+  const timers = new Map();
+  let timerId = 0;
+  let nowMs = 1_700_000_000_000;
+  const RealDate = Date;
+  class TestDate extends RealDate {
+    static now() {
+      return nowMs;
+    }
+  }
+  const page = loadStudentPage({
+    Date: TestDate,
+    screen: { orientation: { angle: 0 } },
+    addEventListener: (name, handler) => listeners.set(name, handler),
+    removeEventListener: (name) => listeners.delete(name),
+    setTimeout(callback) { timers.set(++timerId, callback); return timerId; },
+    clearTimeout(id) { timers.delete(id); },
+  });
+  await page.api.openCompass();
+  page.api.applyCompassTarget({ compassDeg: 90, altitude: 30, label: '지금 달이 있는 쪽' });
+  const emit = (event = {}) => {
+    // 보정은 값이 비슷한 채로 약 1.2초가 흘러야 끝납니다. 시험에서는 시계를 조금 앞으로 밉니다.
+    nowMs += 200;
+    listeners.get('deviceorientation')({ alpha: 0, beta: 0, gamma: 0, absolute: true, ...event });
+  };
+  // 센서 준비(보정)가 끝나야 실제 방위 안내가 시작됩니다. 시험에서는 값을 조금씩 흔들어 그 과정을 흉내 냅니다.
+  const calibrate = (alpha = 0) => {
+    for (const drift of [4, -4, 3, -3, 2, -2, 1, -1, 0, 0]) emit({ alpha: alpha + drift });
+  };
+  return { ...page, emit, calibrate, listeners, timers };
+}
+
+test("나침반을 열면 바로 방위를 말하지 않고 숫자 8 보정 안내부터 보여 준다", async () => {
+  const page = await connectedCompassPage();
+  assert.equal(page.element('compassMoon').getAttribute('visibility'), 'hidden');
+  assert.match(page.element('compassModeLabel').textContent, /학습 그림/);
+  assert.match(page.element('compassInstruction').textContent, /숫자 8/);
+  assert.match(page.element('compassInstruction').textContent, /금속/);
+  // 보정 중에는 실제 방위를 알려 주지 않습니다.
+  page.emit({ alpha: 270 });
+  assert.equal(page.element('compassMoon').getAttribute('visibility'), 'hidden');
+  assert.equal(page.element('compassFront').getAttribute('visibility'), 'hidden');
+  assert.match(page.element('compassModeLabel').textContent, /준비하는 중/);
+  // 손이 안정됐다고 판단되면 그때부터 실제 방위와 달을 보여 줍니다.
+  page.calibrate(270);
+  assert.equal(page.element('compassMoon').getAttribute('visibility'), 'visible');
+  assert.ok(Math.abs(Number(page.element('compassNorth').getAttribute('x')) - 48) < 0.2);
+  assert.ok(Math.abs(Number(page.element('compassEast').getAttribute('y')) - 48) < 0.2);
+  assert.ok(Math.abs(compassRoseDegrees(page) + 90) < 0.2, `rose ${page.element('compassRose').getAttribute('transform')}`);
+  const moon = page.element('compassMoon').getAttribute('transform')?.match(/translate\(([-0-9.]+) ([-0-9.]+)\)/);
+  assert.ok(moon && Math.abs(Number(moon[1]) - 140) < 1 && Math.abs(Number(moon[2]) - 70) < 1, `moon ${page.element('compassMoon').getAttribute('transform')}`);
+  assert.match(page.element('compassFacingLabel').textContent, /동쪽/);
+  assert.match(page.element('compassInstruction').textContent, /올려다봐요/);
+});
+
+test("세움·뒤집음·자세 누락에서는 실시간 안내를 지우고 다시 눕히면 복구한다", async () => {
+  const page = await connectedCompassPage();
+  page.calibrate();
+  for (const event of [{ beta: 90 }, { beta: 180 }, { gamma: 80 }, { beta: null }]) {
+    page.emit(event);
+    assert.equal(page.element('compassMoon').getAttribute('visibility'), 'hidden');
+    assert.equal(page.element('compassFront').getAttribute('visibility'), 'hidden');
+    assert.match(page.element('compassModeLabel').textContent, /학습 그림/);
+    page.emit();
+    assert.equal(page.element('compassMoon').getAttribute('visibility'), 'visible');
+  }
+  page.emit({ beta: 35 });
+  assert.equal(page.element('compassMoon').getAttribute('visibility'), 'visible');
+  page.emit({ beta: 41 });
+  page.emit({ beta: 35 });
+  assert.equal(page.element('compassMoon').getAttribute('visibility'), 'hidden');
+});
+
+test("북쪽 359도 경계를 짧게 이어서 돌리고 화면 회전 때는 이전 방향을 섞지 않는다", async () => {
+  const page = await connectedCompassPage();
+  page.calibrate();
+  page.emit({ alpha: 1 });
+  page.emit({ alpha: 359 });
+  // 359도와 1도는 짧은 쪽으로 이어지므로, 한 바퀴 돌아 180도 근처로 가지 않습니다.
+  const wrapped = ((compassRoseDegrees(page) % 360) + 360) % 360;
+  assert.ok(wrapped < 1 || wrapped > 359, `unexpected wrap ${wrapped}`);
+  page.context.screen.orientation.angle = 90;
+  page.emit({ alpha: 0 });
+  assert.ok(Math.abs(compassRoseDegrees(page) + 90) < 0.01);
+});
+
+test("달이 뒤에 있으면 뒤쪽 안내를 하고 지평선 아래에 있으면 달 표시를 숨긴다", async () => {
+  const page = await connectedCompassPage();
+  page.calibrate();
+  page.api.applyCompassTarget({ compassDeg: 180, altitude: 10, label: '지금 달이 있는 쪽' });
+  page.emit();
+  assert.match(page.element('compassInstruction').textContent, /뒤쪽/);
+  assert.match(page.element('compassHeightHint').textContent, /낮은 하늘/);
+  page.api.applyCompassTarget({ compassDeg: 90, altitude: null, label: '다음에 달이 뜨는 쪽', rise: new Date() });
+  page.emit();
+  assert.equal(page.element('compassMoon').getAttribute('visibility'), 'hidden');
+  assert.match(page.element('compassInstruction').textContent, /지평선 위에 없어요/);
+  assert.match(page.element('compassHeightHint').textContent, /떠요/);
+});
+
+test("방향 값이 끊기거나 닫히면 오래된 안내와 센서 구독을 남기지 않는다", async () => {
+  const page = await connectedCompassPage();
+  page.calibrate();
+  page.emit();
+  const timeout = [...page.timers.values()].at(-1);
+  timeout();
+  assert.equal(page.element('compassMoon').getAttribute('visibility'), 'hidden');
+  assert.match(page.element('compassStatus').textContent, /끊겼어요/);
+  page.emit();
+  assert.equal(page.element('compassMoon').getAttribute('visibility'), 'visible');
+  page.api.closeCompass();
+  assert.equal(page.listeners.size, 0);
+  assert.equal(page.timers.size, 0);
+  assert.equal(page.element('compassMoon').getAttribute('visibility'), 'hidden');
+});
+
 function findSampleObservationDays(api) {
   const lat = 36.5;
   const lon = 127.5;
@@ -374,4 +525,51 @@ test("hard-day cards use a high-contrast warning color", () => {
   assert.equal(page.element("observationTipHeading").textContent, "🔭 관찰 도움말");
   assert.match(page.element("observationTipCard").className, /border-blue-400/);
   assert.doesNotMatch(page.element("observationTipCard").className, /border-amber-400/);
+});
+
+test("student moon times follow the evening-to-after-midnight night, not calendar midnight", () => {
+  const page = loadStudentPage();
+  const { api } = page;
+  const lat = 36.5;
+  const lon = 127.5;
+
+  const sep5 = api.MoonEngine.resolveMoonEvents(new Date(2026, 8, 5, 12), lat, lon);
+  assert.ok(sep5.rise);
+  assert.ok(sep5.set);
+  assert.equal(sep5.rise.getHours(), 0);
+  assert.equal(sep5.rise.getMinutes(), 3);
+  assert.equal(sep5.set.getHours(), 15);
+  assert.equal(sep5.set.getMinutes(), 47);
+
+  const sep20 = api.MoonEngine.resolveMoonEvents(new Date(2026, 8, 20, 12), lat, lon);
+  assert.ok(sep20.rise);
+  assert.ok(sep20.set);
+  assert.equal(sep20.rise.getHours(), 14);
+  assert.equal(sep20.rise.getMinutes(), 54);
+  assert.equal(sep20.set.getHours(), 0);
+  assert.equal(sep20.set.getMinutes(), 26);
+
+  const oct4 = api.MoonEngine.resolveMoonEvents(new Date(2026, 9, 4, 12), lat, lon);
+  assert.ok(oct4.rise);
+  assert.ok(oct4.set);
+  assert.equal(oct4.rise.getHours(), 0);
+  assert.equal(oct4.rise.getMinutes(), 11);
+
+  page.api.setSelectedDate(new Date(2026, 8, 5, 12));
+  page.api.renderToday();
+  assert.equal(page.element("moonriseTime").textContent, "00:03");
+  assert.equal(page.element("moonsetTime").textContent, "15:47");
+  assert.doesNotMatch(page.element("moonriseTime").textContent, /전날|다음날|관찰 어려움/);
+  assert.doesNotMatch(page.element("moonsetTime").textContent, /전날|다음날|관찰 어려움/);
+
+  page.api.setSelectedDate(new Date(2026, 8, 20, 12));
+  page.api.renderToday();
+  assert.equal(page.element("moonriseTime").textContent, "14:54");
+  assert.equal(page.element("moonsetTime").textContent, "00:26");
+  assert.doesNotMatch(page.element("moonsetTime").textContent, /전날|다음날|관찰 어려움/);
+
+  page.api.setSelectedDate(new Date(2026, 9, 4, 12));
+  page.api.renderToday();
+  assert.equal(page.element("moonriseTime").textContent, "00:11");
+  assert.doesNotMatch(page.element("moonriseTime").textContent, /전날|다음날|관찰 어려움/);
 });
