@@ -1,0 +1,28 @@
+{
+  "id": "/",
+  "name": "달 관찰 탐험대",
+  "short_name": "달 관찰",
+  "description": "초등학생을 위한 달 모양·관찰 시간 확인과 사진 기록 활동",
+  "lang": "ko-KR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#070913",
+  "theme_color": "#070913",
+  "categories": ["education"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/pwa-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/pwa-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

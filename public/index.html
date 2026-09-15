@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>달 관찰 탐험대</title>
   <meta name="description" content="초등학생을 위한 달 모양·관찰 시간 확인과 사진 기록 활동">
+  <meta name="theme-color" content="#070913">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="달 관찰 탐험대">
   <meta property="og:title" content="달 관찰 탐험대">
   <meta property="og:description" content="달 모양을 살펴보고 관찰 사진을 기록해요">
   <meta property="og:type" content="website">
@@ -14,6 +19,8 @@
   <meta name="twitter:title" content="달 관찰 탐험대">
   <meta name="twitter:description" content="달 모양을 살펴보고 관찰 사진을 기록해요">
   <meta name="twitter:image" content="https://gongju-moon-observation.1226ijs.workers.dev/og.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="stylesheet" href="/app.css">
   <style>
     html { color-scheme: dark; }
@@ -98,6 +105,28 @@
     <div id="sessionBanner" class="mb-5 rounded-2xl border border-blue-400/20 bg-blue-400/[.07] px-4 py-3 text-sm leading-6 text-blue-100" role="status" aria-live="polite">
       수업 참여 상태를 확인하고 있어요.
     </div>
+    <aside id="pwaInstallBanner" class="mb-5 hidden rounded-2xl border border-amber-400/25 bg-amber-400/[.07] p-4 shadow-card" aria-labelledby="pwaInstallTitle">
+      <div class="flex items-start gap-3">
+        <div class="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-amber-400/25 bg-amber-400/10 text-xl" aria-hidden="true">📱</div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h2 id="pwaInstallTitle" class="text-sm font-black text-amber-100">홈 화면에 달 관찰 앱을 추가해요</h2>
+              <p id="pwaInstallMessage" class="mt-1 text-xs leading-5 text-slate-300">홈 화면에서 바로 열면 다음 관찰 때 더 편하게 사용할 수 있어요.</p>
+            </div>
+            <button type="button" onclick="dismissPwaInstallBanner()" class="grid h-9 w-9 shrink-0 place-items-center rounded-full text-lg font-bold text-slate-400 hover:bg-white/10 hover:text-white" aria-label="홈 화면 추가 안내 닫기">×</button>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button id="pwaInstallButton" type="button" onclick="handlePwaInstallAction()" class="min-h-10 rounded-xl bg-amber-500 px-4 py-2 text-xs font-black text-space-950 hover:bg-amber-400">설치 방법 보기</button>
+            <button type="button" onclick="dismissPwaInstallBanner()" class="min-h-10 rounded-xl border border-space-600 bg-space-900 px-4 py-2 text-xs font-bold text-slate-300 hover:border-space-500">오늘은 괜찮아요</button>
+          </div>
+          <div id="pwaInstallHelp" class="mt-3 hidden rounded-xl border border-space-600 bg-space-950/70 px-4 py-3 text-xs leading-5 text-slate-300">
+            <p class="font-black text-slate-100">홈 화면에 추가하는 방법</p>
+            <ol id="pwaInstallSteps" class="mt-1 list-decimal space-y-1 pl-5"></ol>
+          </div>
+        </div>
+      </div>
+    </aside>
     <section id="view-today" class="view-panel space-y-5" aria-labelledby="todayHeading">
       <div class="rounded-3xl border border-space-700 bg-space-800/85 p-4 sm:p-5 shadow-card backdrop-blur">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -518,6 +547,8 @@
     let cameraStream = null;
     const DRAFT_KEY = 'moon-observation-draft-v1';
     const SESSION_RESUME_KEY = 'moon-class-resume-v1';
+    const PWA_INSTALL_DISMISS_KEY = 'moon-pwa-install-dismissed-v1';
+    const PWA_INSTALL_DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
     const DRAFT_FIELDS = ['studentNumber', 'studentName', 'observedAt', 'memo'];
     const DRAFT_MAX_AGE = 24 * 60 * 60 * 1000;
     const CAMERA_PENDING_KEY = 'moon-camera-pending-v1';
@@ -595,6 +626,9 @@
     let compassGatePassed = false;
     let compassGateElapsedMs = 0;
     let compassGateDegrees = [];
+    let deferredPwaInstallPrompt = null;
+    let pwaInstallPlatform = 'other';
+    let pwaInstallListenersBound = false;
     const COMPASS_GATE_MESSAGE = '휴대폰을 금속 물건에서 떨어뜨리고, 숫자 8을 그리듯 천천히 움직여 주세요';
 
     const MoonEngine = (() => {
@@ -893,6 +927,7 @@
       renderToday();
       renderCalendar();
       initObservationDraft();
+      initPwaInstallExperience();
       checkSession();
       window.addEventListener('pagehide', () => {
         stopCamera();
@@ -919,6 +954,152 @@
         trapLateNightFocus(event);
       });
     });
+
+    function isPwaStandalone() {
+      const standaloneDisplay = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches;
+      const iosStandalone = typeof navigator !== 'undefined' && navigator.standalone === true;
+      return standaloneDisplay || iosStandalone;
+    }
+
+    function detectPwaInstallPlatform() {
+      if (typeof navigator === 'undefined') return 'other';
+      const ua = navigator.userAgent || '';
+      const iPadOs = navigator.platform === 'MacIntel' && Number(navigator.maxTouchPoints) > 1;
+      if (/iPhone|iPad|iPod/i.test(ua) || iPadOs) return 'ios';
+      if (/Android/i.test(ua)) return 'android';
+      return 'other';
+    }
+
+    function isLikelyInAppBrowser() {
+      if (typeof navigator === 'undefined') return false;
+      const ua = navigator.userAgent || '';
+      return /NAVER|KAKAOTALK|KAKAO|Instagram|FBAN|FBAV|Line\/|\bwv\b/i.test(ua);
+    }
+
+    function pwaInstallDismissedRecently() {
+      try {
+        const dismissedAt = Number(localStorage.getItem(PWA_INSTALL_DISMISS_KEY));
+        const age = Date.now() - dismissedAt;
+        return Number.isFinite(dismissedAt) && dismissedAt > 0 && age >= 0 && age < PWA_INSTALL_DISMISS_MS;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function hidePwaInstallBanner() {
+      const banner = document.getElementById('pwaInstallBanner');
+      if (banner) banner.classList.add('hidden');
+    }
+
+    function renderPwaInstallSteps(platform, inApp) {
+      const list = document.getElementById('pwaInstallSteps');
+      if (!list) return;
+      const steps = platform === 'ios'
+        ? inApp
+          ? ['현재 앱 안 화면을 닫고 선생님이 안내한 수업 QR을 다시 준비해요.', 'iPhone 카메라로 QR을 찍어 Safari에서 수업 링크를 열어요.', '수업 참여가 확인되면 공유 버튼(□↑) → 홈 화면에 추가 → 추가를 눌러요.']
+          : ['아래쪽의 공유 버튼(□↑)을 눌러요.', '홈 화면에 추가를 찾아 눌러요.', '오른쪽 위의 추가를 눌러요.']
+        : inApp
+          ? ['현재 앱 안 화면을 닫고 선생님이 안내한 수업 QR을 다시 준비해요.', 'QR을 Chrome에서 열어 수업 참여를 다시 확인해요.', 'Chrome에서 나타나는 홈 화면 설치 안내를 따라 설치해요.']
+          : ['브라우저 오른쪽 위의 ⋮ 메뉴를 눌러요.', '앱 설치 또는 홈 화면에 추가를 눌러요.', '화면 안내에 따라 설치를 확인해요.'];
+      list.replaceChildren(...steps.map((text) => {
+        const item = document.createElement('li');
+        item.textContent = text;
+        return item;
+      }));
+    }
+
+    function updatePwaInstallBanner() {
+      const banner = document.getElementById('pwaInstallBanner');
+      const message = document.getElementById('pwaInstallMessage');
+      const button = document.getElementById('pwaInstallButton');
+      if (!banner || !message || !button) return;
+
+      pwaInstallPlatform = detectPwaInstallPlatform();
+      if (!hasClassSession || isPwaStandalone() || pwaInstallPlatform === 'other' || pwaInstallDismissedRecently()) {
+        hidePwaInstallBanner();
+        return;
+      }
+
+      const inApp = isLikelyInAppBrowser();
+      renderPwaInstallSteps(pwaInstallPlatform, inApp);
+      if (pwaInstallPlatform === 'ios') {
+        message.textContent = inApp
+          ? '앱 안의 브라우저에서는 수업 참여 상태가 Safari로 그대로 옮겨지지 않을 수 있어요. 수업 QR을 Safari에서 다시 연 뒤 홈 화면에 추가해 주세요.'
+          : '홈 화면에 추가해 두면 다음 관찰 때 바로 열 수 있고, Safari 탭과 따로 실행할 수 있어요.';
+      } else if (inApp) {
+        message.textContent = '앱 안의 브라우저에서는 수업 참여 상태가 Chrome으로 그대로 옮겨지지 않을 수 있어요. 수업 QR을 Chrome에서 다시 연 뒤 설치해 주세요.';
+      } else {
+        message.textContent = '홈 화면에 설치해 두면 다음 관찰 때 바로 열 수 있고, 일반 브라우저 탭과 따로 실행할 수 있어요.';
+      }
+      button.textContent = deferredPwaInstallPrompt ? '홈 화면에 설치' : '설치 방법 보기';
+      banner.classList.remove('hidden');
+    }
+
+    function dismissPwaInstallBanner() {
+      try { localStorage.setItem(PWA_INSTALL_DISMISS_KEY, String(Date.now())); } catch (_) { /* Storage may be disabled. */ }
+      hidePwaInstallBanner();
+    }
+
+    function showPwaInstallHelp() {
+      const help = document.getElementById('pwaInstallHelp');
+      if (!help) return;
+      renderPwaInstallSteps(pwaInstallPlatform, isLikelyInAppBrowser());
+      help.classList.remove('hidden');
+      const firstStep = help.querySelector('li');
+      if (firstStep && typeof firstStep.scrollIntoView === 'function') {
+        firstStep.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+
+    async function handlePwaInstallAction() {
+      if (!deferredPwaInstallPrompt) {
+        showPwaInstallHelp();
+        return;
+      }
+      const promptEvent = deferredPwaInstallPrompt;
+      deferredPwaInstallPrompt = null;
+      try {
+        const promptResult = await promptEvent.prompt();
+        const choice = promptResult && promptResult.outcome
+          ? promptResult
+          : promptEvent.userChoice
+            ? await promptEvent.userChoice
+            : null;
+        if (choice?.outcome === 'accepted') {
+          hidePwaInstallBanner();
+          return;
+        }
+      } catch (_) {
+        // The browser may withdraw an install prompt after navigation or a prior use.
+      }
+      updatePwaInstallBanner();
+      showPwaInstallHelp();
+    }
+
+    function initPwaInstallExperience() {
+      updatePwaInstallBanner();
+      if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+      if (!pwaInstallListenersBound) {
+        pwaInstallListenersBound = true;
+        window.addEventListener('beforeinstallprompt', (event) => {
+          event.preventDefault();
+          deferredPwaInstallPrompt = event;
+          updatePwaInstallBanner();
+        });
+        window.addEventListener('appinstalled', () => {
+          deferredPwaInstallPrompt = null;
+          try { localStorage.removeItem(PWA_INSTALL_DISMISS_KEY); } catch (_) { /* Storage may be disabled. */ }
+          hidePwaInstallBanner();
+          showToast('홈 화면에 달 관찰 앱을 추가했어요! 🌙');
+        });
+      }
+      if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js', { scope: '/' }).catch(() => {
+          // Installation guidance still works when registration is unavailable.
+        });
+      }, { once: true });
+    }
 
     function initObservationDraft() {
       const form = document.getElementById('observationForm');
@@ -1160,6 +1341,7 @@
         sessionCheckNeedsRetry = true;
       }
       setClassroomContext(lastSessionContext);
+      updatePwaInstallBanner();
       if (hasClassSession) {
         restoreObservationDraft(lastSessionContext);
         restoreCameraPending(lastSessionContext);
