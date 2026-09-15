@@ -127,6 +127,28 @@
         </div>
       </div>
     </aside>
+    <div id="pwaInstallDialog" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 p-4 backdrop-blur" role="dialog" aria-modal="true" aria-labelledby="pwaInstallDialogTitle" aria-describedby="pwaInstallDialogMessage">
+      <section class="w-full max-w-md rounded-3xl border border-amber-400/35 bg-space-800 p-5 shadow-card sm:p-6">
+        <div class="flex items-start gap-3">
+          <div class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-amber-400/25 bg-amber-400/10 text-2xl" aria-hidden="true">📱</div>
+          <div class="min-w-0 flex-1">
+            <p class="text-xs font-bold text-amber-300">처음 한 번만 안내할게요</p>
+            <h2 id="pwaInstallDialogTitle" class="mt-1 text-xl font-black text-white">홈 화면에 달 관찰 앱을 추가해요</h2>
+          </div>
+          <button type="button" onclick="closePwaInstallDialog()" class="grid h-10 w-10 shrink-0 place-items-center rounded-full text-xl font-bold text-slate-400 hover:bg-white/10 hover:text-white" aria-label="홈 화면 추가 팝업 닫기">×</button>
+        </div>
+        <p id="pwaInstallDialogMessage" class="mt-4 text-sm leading-6 text-slate-300">홈 화면에서 바로 열면 다음 관찰 때 더 편하게 사용할 수 있어요.</p>
+        <div class="mt-4 rounded-2xl border border-space-600 bg-space-950/70 px-4 py-3 text-sm leading-6 text-slate-300">
+          <p class="font-black text-slate-100">이렇게 추가해요</p>
+          <ol id="pwaInstallDialogSteps" class="mt-1 list-decimal space-y-1 pl-5"></ol>
+        </div>
+        <div class="mt-5 grid gap-2 sm:grid-cols-2">
+          <button id="pwaInstallDialogAction" type="button" onclick="handlePwaInstallDialogAction()" class="min-h-11 rounded-xl bg-amber-500 px-4 py-3 text-sm font-black text-space-950 hover:bg-amber-400">홈 화면에 설치</button>
+          <button type="button" onclick="closePwaInstallDialog()" class="min-h-11 rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-sm font-bold text-slate-300 hover:border-space-500">나중에 할게요</button>
+        </div>
+        <p class="mt-3 text-center text-[11px] leading-5 text-slate-500">팝업은 처음 한 번만 보여요. 이후에는 화면 위 안내에서 다시 설치할 수 있어요.</p>
+      </section>
+    </div>
     <section id="view-today" class="view-panel space-y-5" aria-labelledby="todayHeading">
       <div class="rounded-3xl border border-space-700 bg-space-800/85 p-4 sm:p-5 shadow-card backdrop-blur">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -548,6 +570,7 @@
     const DRAFT_KEY = 'moon-observation-draft-v1';
     const SESSION_RESUME_KEY = 'moon-class-resume-v1';
     const PWA_INSTALL_DISMISS_KEY = 'moon-pwa-install-dismissed-v1';
+    const PWA_INSTALL_INTRO_SEEN_KEY = 'moon-pwa-install-intro-seen-v1';
     const PWA_INSTALL_DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
     const DRAFT_FIELDS = ['studentNumber', 'studentName', 'observedAt', 'memo'];
     const DRAFT_MAX_AGE = 24 * 60 * 60 * 1000;
@@ -629,6 +652,7 @@
     let deferredPwaInstallPrompt = null;
     let pwaInstallPlatform = 'other';
     let pwaInstallListenersBound = false;
+    let pwaInstallDialogPreviousFocus = null;
     const COMPASS_GATE_MESSAGE = '휴대폰을 금속 물건에서 떨어뜨리고, 숫자 8을 그리듯 천천히 움직여 주세요';
 
     const MoonEngine = (() => {
@@ -935,6 +959,10 @@
       });
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
+          if (isPwaInstallDialogOpen()) {
+            closePwaInstallDialog();
+            return;
+          }
           if (isCompassIntroOpen()) {
             dismissCompassIntro();
             return;
@@ -991,8 +1019,39 @@
       if (banner) banner.classList.add('hidden');
     }
 
-    function renderPwaInstallSteps(platform, inApp) {
-      const list = document.getElementById('pwaInstallSteps');
+    function pwaInstallIntroSeen() {
+      try { return localStorage.getItem(PWA_INSTALL_INTRO_SEEN_KEY) === '1'; } catch (_) { return false; }
+    }
+
+    function markPwaInstallIntroSeen() {
+      try { localStorage.setItem(PWA_INSTALL_INTRO_SEEN_KEY, '1'); } catch (_) { /* Storage may be disabled. */ }
+    }
+
+    function isPwaInstallDialogOpen() {
+      const dialog = document.getElementById('pwaInstallDialog');
+      return Boolean(
+        dialog &&
+        dialog.classList &&
+        typeof dialog.classList.contains === 'function' &&
+        !dialog.classList.contains('hidden')
+      );
+    }
+
+    function closePwaInstallDialog() {
+      const dialog = document.getElementById('pwaInstallDialog');
+      if (dialog && dialog.classList) {
+        dialog.classList.add('hidden');
+        dialog.classList.remove('flex');
+      }
+      if (document.body && document.body.classList) document.body.classList.remove('overflow-hidden');
+      if (pwaInstallDialogPreviousFocus && typeof pwaInstallDialogPreviousFocus.focus === 'function') {
+        pwaInstallDialogPreviousFocus.focus();
+      }
+      pwaInstallDialogPreviousFocus = null;
+    }
+
+    function renderPwaInstallSteps(platform, inApp, listId = 'pwaInstallSteps') {
+      const list = document.getElementById(listId);
       if (!list) return;
       const steps = platform === 'ios'
         ? inApp
@@ -1008,6 +1067,36 @@
       }));
     }
 
+    function pwaInstallMessage(platform, inApp) {
+      if (platform === 'ios') {
+        return inApp
+          ? '앱 안의 브라우저에서는 수업 참여 상태가 Safari로 그대로 옮겨지지 않을 수 있어요. 수업 QR을 Safari에서 다시 연 뒤 홈 화면에 추가해 주세요.'
+          : '홈 화면에 추가해 두면 다음 관찰 때 바로 열 수 있고, Safari 탭과 따로 실행할 수 있어요.';
+      }
+      if (inApp) {
+        return '앱 안의 브라우저에서는 수업 참여 상태가 Chrome으로 그대로 옮겨지지 않을 수 있어요. 수업 QR을 Chrome에서 다시 연 뒤 설치해 주세요.';
+      }
+      return '홈 화면에 설치해 두면 다음 관찰 때 바로 열 수 있고, 일반 브라우저 탭과 따로 실행할 수 있어요.';
+    }
+
+    function maybeShowInitialPwaInstallDialog() {
+      if (!hasClassSession || isPwaStandalone() || pwaInstallPlatform === 'other' || pwaInstallDismissedRecently() || pwaInstallIntroSeen()) return;
+      const dialog = document.getElementById('pwaInstallDialog');
+      const message = document.getElementById('pwaInstallDialogMessage');
+      const action = document.getElementById('pwaInstallDialogAction');
+      if (!dialog || !message || !action || !dialog.classList) return;
+      const inApp = isLikelyInAppBrowser();
+      markPwaInstallIntroSeen();
+      renderPwaInstallSteps(pwaInstallPlatform, inApp, 'pwaInstallDialogSteps');
+      message.textContent = pwaInstallMessage(pwaInstallPlatform, inApp);
+      action.textContent = deferredPwaInstallPrompt ? '홈 화면에 설치' : '설치 방법 확인';
+      pwaInstallDialogPreviousFocus = document.activeElement || null;
+      dialog.classList.remove('hidden');
+      dialog.classList.add('flex');
+      if (document.body && document.body.classList) document.body.classList.add('overflow-hidden');
+      if (typeof action.focus === 'function') action.focus();
+    }
+
     function updatePwaInstallBanner() {
       const banner = document.getElementById('pwaInstallBanner');
       const message = document.getElementById('pwaInstallMessage');
@@ -1017,22 +1106,16 @@
       pwaInstallPlatform = detectPwaInstallPlatform();
       if (!hasClassSession || isPwaStandalone() || pwaInstallPlatform === 'other' || pwaInstallDismissedRecently()) {
         hidePwaInstallBanner();
+        if (isPwaInstallDialogOpen()) closePwaInstallDialog();
         return;
       }
 
       const inApp = isLikelyInAppBrowser();
       renderPwaInstallSteps(pwaInstallPlatform, inApp);
-      if (pwaInstallPlatform === 'ios') {
-        message.textContent = inApp
-          ? '앱 안의 브라우저에서는 수업 참여 상태가 Safari로 그대로 옮겨지지 않을 수 있어요. 수업 QR을 Safari에서 다시 연 뒤 홈 화면에 추가해 주세요.'
-          : '홈 화면에 추가해 두면 다음 관찰 때 바로 열 수 있고, Safari 탭과 따로 실행할 수 있어요.';
-      } else if (inApp) {
-        message.textContent = '앱 안의 브라우저에서는 수업 참여 상태가 Chrome으로 그대로 옮겨지지 않을 수 있어요. 수업 QR을 Chrome에서 다시 연 뒤 설치해 주세요.';
-      } else {
-        message.textContent = '홈 화면에 설치해 두면 다음 관찰 때 바로 열 수 있고, 일반 브라우저 탭과 따로 실행할 수 있어요.';
-      }
+      message.textContent = pwaInstallMessage(pwaInstallPlatform, inApp);
       button.textContent = deferredPwaInstallPrompt ? '홈 화면에 설치' : '설치 방법 보기';
       banner.classList.remove('hidden');
+      maybeShowInitialPwaInstallDialog();
     }
 
     function dismissPwaInstallBanner() {
@@ -1076,6 +1159,11 @@
       showPwaInstallHelp();
     }
 
+    async function handlePwaInstallDialogAction() {
+      closePwaInstallDialog();
+      await handlePwaInstallAction();
+    }
+
     function initPwaInstallExperience() {
       updatePwaInstallBanner();
       if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
@@ -1085,11 +1173,14 @@
           event.preventDefault();
           deferredPwaInstallPrompt = event;
           updatePwaInstallBanner();
+          const dialogAction = document.getElementById('pwaInstallDialogAction');
+          if (dialogAction && isPwaInstallDialogOpen()) dialogAction.textContent = '홈 화면에 설치';
         });
         window.addEventListener('appinstalled', () => {
           deferredPwaInstallPrompt = null;
           try { localStorage.removeItem(PWA_INSTALL_DISMISS_KEY); } catch (_) { /* Storage may be disabled. */ }
           hidePwaInstallBanner();
+          closePwaInstallDialog();
           showToast('홈 화면에 달 관찰 앱을 추가했어요! 🌙');
         });
       }

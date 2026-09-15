@@ -11,6 +11,7 @@ test("student page advertises an installable standalone PWA", async () => {
   assert.match(html, /rel="manifest" href="\/manifest\.webmanifest"/);
   assert.match(html, /rel="apple-touch-icon" href="\/apple-touch-icon\.png"/);
   assert.match(html, /id="pwaInstallBanner"/);
+  assert.match(html, /id="pwaInstallDialog"[^>]*role="dialog"[^>]*aria-modal="true"/);
   assert.match(html, /beforeinstallprompt/);
   assert.match(html, /navigator\.standalone === true/);
 
@@ -49,5 +50,9 @@ test("student install guidance covers Android, iOS, in-app browsers, and dismiss
   assert.match(html, /수업 QR을 Chrome에서 다시 연 뒤 설치/);
   assert.match(html, /!hasClassSession \|\| isPwaStandalone\(\)/);
   assert.match(html, /PWA_INSTALL_DISMISS_MS = 7 \* 24 \* 60 \* 60 \* 1000/);
+  assert.match(html, /PWA_INSTALL_INTRO_SEEN_KEY = 'moon-pwa-install-intro-seen-v1'/);
+  assert.match(html, /function maybeShowInitialPwaInstallDialog\(\)/);
+  assert.match(html, /markPwaInstallIntroSeen\(\)/);
+  assert.match(html, /팝업은 처음 한 번만 보여요/);
   assert.match(html, /serviceWorker\.register\('\/service-worker\.js'/);
 });
