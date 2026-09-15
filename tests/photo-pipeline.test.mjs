@@ -514,3 +514,103 @@ test('the worker rejects an unsafe requested target before codec allocation or d
   assert.equal(calls.includes('decode'), false);
   assert.equal(calls.at(-1), 'close');
 });
+
+test('native images inspect at most 1MB without reading a full-file copy', async () => {
+  const original = jpeg(4000, 3000);
+  const file = new Blob([original, new Uint8Array(5 * 1024 * 1024)]);
+  const slice = file.slice.bind(file);
+  const reads = [];
+  file.slice = (start, end) => { reads.push([start, end]); return slice(start, end); };
+  file.arrayBuffer = () => { throw new Error('unnecessary full-file read'); };
+  const browser = loadPipeline({ createImageBitmap: async () => ({ width: 2560, height: 1920, close() {} }) });
+  await browser.pipeline.compress(file);
+  assert.deepEqual(reads, [[0, 1024 * 1024]]);
+  assert.equal(browser.encodes.length, 1);
+});
+
+test('large JPEG reads its bounded input once only for Worker transfer', async () => {
+  const file = jpeg(5222, 6024);
+  const read = file.arrayBuffer.bind(file);
+  let wholeReads = 0;
+  file.arrayBuffer = () => { wholeReads += 1; return read(); };
+  const browser = loadPipeline();
+  await browser.pipeline.compress(file);
+  assert.equal(wholeReads, 1);
+  assert.equal(browser.workers.length, 1);
+  assert.equal(browser.workers[0].transfer.length, 1);
+  assert.equal(browser.workers[0].transfer[0], browser.workers[0].message.buffer);
+});
+
+test('a cloud-backed header read times out and a late read cannot start decoding', async () => {
+  const clock = manualClock();
+  let finishRead;
+  let decodeCalls = 0;
+  const bytes = await jpeg(1200, 800).arrayBuffer();
+  const file = {
+    size: bytes.byteLength, arrayBuffer() { throw new Error('full read forbidden'); },
+    slice() { return { size: bytes.byteLength, arrayBuffer: () => new Promise((resolve) => { finishRead = resolve; }) }; },
+  };
+  const browser = loadPipeline({ clock, createImageBitmap: async () => { decodeCalls += 1; } });
+  const pending = browser.pipeline.compress(file);
+  await new Promise(setImmediate);
+  clock.runAll();
+  await assert.rejects(pending, (error) => error.code === 'file-read-timeout');
+  finishRead(bytes);
+  await new Promise(setImmediate);
+  assert.equal(decodeCalls, 0);
+  assert.equal(browser.workers.length, 0);
+  assert.equal(browser.canvases.length, 0);
+});
+
+test('a stalled full JPEG read times out before allocating a Worker', async () => {
+  const clock = manualClock();
+  const file = jpeg(5222, 6024);
+  file.arrayBuffer = () => new Promise(() => {});
+  const browser = loadPipeline({ clock });
+  const pending = browser.pipeline.compress(file);
+  await new Promise(setImmediate);
+  clock.runAll();
+  await assert.rejects(pending, (error) => error.code === 'file-read-timeout');
+  assert.equal(browser.workers.length, 0);
+});
+
+test('VP8 and VP8L WebP files are accepted without trusting their MIME type', async () => {
+  for (const chunk of [0x56503820, 0x5650384c]) {
+    const bytes = new Uint8Array(30);
+    const view = new DataView(bytes.buffer);
+    view.setUint32(0, 0x52494646); view.setUint32(8, 0x57454250); view.setUint32(12, chunk);
+    if (chunk === 0x56503820) {
+      bytes.set([0x9d, 0x01, 0x2a], 23);
+      view.setUint16(26, 1200, true); view.setUint16(28, 800, true);
+    } else {
+      bytes[20] = 0x2f;
+      view.setUint32(21, 1199 | (799 << 14), true);
+    }
+    let dimensions;
+    const browser = loadPipeline({ createImageBitmap: async (_file, options) => {
+      dimensions = [options.resizeWidth, options.resizeHeight];
+      return { width: 1200, height: 800, close() {} };
+    } });
+    await browser.pipeline.compress(new Blob([bytes], { type: 'application/octet-stream' }));
+    assert.deepEqual(dimensions, [1200, 800]);
+  }
+});
+
+test('HEIC has a specific actionable code and never enters a native decoder', async () => {
+  const bytes = new Uint8Array(24);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(0, 24); view.setUint32(4, 0x66747970); view.setUint32(8, 0x68656963);
+  let decoded = false;
+  const browser = loadPipeline({ createImageBitmap: async () => { decoded = true; } });
+  await assert.rejects(browser.pipeline.compress(new Blob([bytes])), (error) => error.code === 'heic-format');
+  assert.equal(decoded, false);
+  assert.equal(browser.workers.length, 0);
+});
+
+test('progress reports fixed stages and a failing UI callback cannot break encoding', async () => {
+  const browser = loadPipeline({ createImageBitmap: async () => ({ width: 1200, height: 800, close() {} }) });
+  const stages = [];
+  await browser.pipeline.compress(jpeg(1200, 800), { onProgress(stage) { stages.push(stage); throw Error('UI unavailable'); } });
+  assert.deepEqual(stages, ['reading', 'decoding', 'encoding']);
+  assert.equal(browser.encodes.length, 1);
+});

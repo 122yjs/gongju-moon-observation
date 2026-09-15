@@ -128,7 +128,7 @@ test('unsafe dimensions are rejected before either native decoder is invoked', a
 
 test('malformed input is rejected without decoding', async () => {
   const b = browser();
-  await assert.rejects(b.api.compressImage(new Blob(['not an image'])), /JPG|사진/);
+  await assert.rejects(b.api.compressImage(new Blob(['not an image'])), (error) => error.code === 'invalid-image');
   assert.equal(b.decodes.length, 0);
 });
 
@@ -149,7 +149,7 @@ test('overlapping file selections decode one image and suspend the previous prev
   let finish;
   let count = 0;
   let wrapHidden = false;
-  const b = browser({ createImageBitmap: async () => {
+  const b = browser({ createImageBitmap: async (_file, options) => {
     count += 1;
     assert.equal(wrapHidden, true);
     await new Promise((resolve) => { finish = resolve; });
@@ -271,4 +271,28 @@ test('PNG with decoder-applied EXIF rotation keeps its portrait aspect ratio', a
   };
   await b.api.compressImage(new Blob([png]));
   assert.deepEqual(encodedSize, [800, 1200]);
+});
+
+test('a replacement releases the old preview pixels and restores its Blob on failure', async () => {
+  const b = browser();
+  b.api.attachPhoto(new Blob(['previous-photo'], { type: 'image/jpeg' }));
+  b.context.MoonPhotoPipeline = { compress: async () => {
+    assert.equal(b.getElement('photoPreview').src, undefined);
+    assert.deepEqual(b.revocations, ['blob:photo-1']);
+    throw Object.assign(new Error('decode failed'), { code: 'image-decode-failed' });
+  } };
+  await b.api.previewPhoto({ target: { files: [jpeg(1200, 800)], value: 'replacement.jpg' } });
+  assert.equal(b.getElement('photoPreview').src, 'blob:photo-2');
+  assert.equal(b.getElement('submitButton').disabled, false);
+  assert.match(b.getElement('photoStatus').textContent, /사진을 준비하지 못했어요/);
+});
+
+test('a JPEG with a valid SOF after 256KB is not rejected by a duplicate header parser', async () => {
+  const padding = new Uint8Array(65536);
+  padding.set([0xff, 0xe2, 0xff, 0xfe]);
+  const original = jpeg(1200, 800);
+  const file = new Blob([original.slice(0, 2), padding, padding, padding, padding, padding, original.slice(2)]);
+  const b = browser();
+  await b.api.compressImage(file);
+  assert.equal(b.decodes.length, 1);
 });

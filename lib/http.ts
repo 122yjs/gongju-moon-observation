@@ -37,6 +37,14 @@ export function errorResponse(error: unknown) {
   if (error instanceof HttpError) {
     return json({ message: error.message }, { status: error.status });
   }
+  if (error instanceof Error && /D1_ERROR/i.test(error.message) && /daily row write limit/i.test(error.message)) {
+    return json(
+      {
+        message: "오늘은 관찰 기록 저장 횟수가 모두 사용되었어요. 자정(UTC) 이후 다시 시도해 주세요.",
+      },
+      { status: 429 },
+    );
+  }
   console.error(error);
   return json(
     { message: "서버에서 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요." },

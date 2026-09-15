@@ -119,6 +119,7 @@ test("stores new student submissions only in teacher Drive and Sheets", async ()
   assert.doesNotMatch(route, /BUCKET\.put|INSERT INTO observations|db\.add\(/);
 });
 
+
 test("opens a protected Korean-time summary while preserving the raw observation sheet", async () => {
   const drive = await readFile(new URL("../lib/google-drive.ts", import.meta.url), "utf8");
   const spreadsheetRoute = await readFile(
@@ -386,6 +387,7 @@ test("keeps an Android gallery JPEG with a nonstandard MIME attached through sub
     Blob,
     File,
     FormData,
+    AbortController,
     URL: {
       createObjectURL: () => "blob:test",
       revokeObjectURL() {},
@@ -402,12 +404,12 @@ test("keeps an Android gallery JPEG with a nonstandard MIME attached through sub
         ok: true,
         status: 201,
         async json() {
-          return { ok: true, message: "제출 완료" };
+          return { ok: true, id: "saved-observation", message: "제출 완료" };
         },
       };
     },
-    setTimeout(callback) {
-      callback();
+    setTimeout(callback, delay) {
+      if (delay !== 90000) callback();
       return 1;
     },
   };
@@ -514,6 +516,13 @@ test("supports operator-controlled deletion of legacy D1 and R2 student data", a
   assert.match(legacy, /BUCKET\.delete/);
   assert.match(operator, /getOperatorSession/);
   assert.match(operator, /assertSameOrigin/);
+});
+
+test("maps the D1 row-write limit to a 429 retry message", async () => {
+  const http = await readFile(new URL("../lib/http.ts", import.meta.url), "utf8");
+  assert.match(http, /D1_ERROR/i);
+  assert.match(http, /daily row write limit/i);
+  assert.match(http, /자정\(UTC\) 이후 다시 시도해 주세요/);
 });
 
 test("ships student moon guidance copy in the built page", async () => {

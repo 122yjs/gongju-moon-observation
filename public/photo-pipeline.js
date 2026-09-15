@@ -3,6 +3,8 @@
   'use strict';
 
   const MAX_SOURCE_BYTES = 20 * 1024 * 1024;
+  const MAX_HEADER_BYTES = 1024 * 1024;
+  const FILE_READ_TIMEOUT_MS = 30000;
   const MAX_SOURCE_PIXELS = 64 * 1000 * 1000;
   const NATIVE_DECODE_PIXELS = 16 * 1000 * 1000;
   const MAX_CANVAS_PIXELS = 8 * 1000 * 1000;
@@ -17,6 +19,9 @@
 
   const messages = {
     'source-limit': 'The source image exceeds the safe size limit.',
+    'file-read-failed': 'The browser could not read the selected photo.',
+    'file-read-timeout': 'The browser did not finish reading the selected photo.',
+    'heic-format': 'HEIC/HEIF photos must be exported as JPEG first.',
     'invalid-image': 'The selected file is not a supported image.',
     'non-jpeg-limit': 'High-resolution images must be JPEG files.',
     'metadata-mismatch': 'The supplied image metadata does not match the file.',
@@ -72,7 +77,7 @@
     if (options.workerUrl !== undefined && (typeof options.workerUrl !== 'string' || !options.workerUrl)) {
       throw problem('invalid-options');
     }
-    return { maxSide, maxOutputBytes, quality, workerUrl: options.workerUrl || '/photo-worker.js' };
+    return { maxSide, maxOutputBytes, quality, workerUrl: options.workerUrl || '/photo-worker.js', onProgress: options.onProgress };
   }
 
   function readJpeg(view) {
@@ -142,12 +147,27 @@
     if (chunk === 0x56503858) {
       width = 1 + view.getUint8(24) + (view.getUint8(25) << 8) + (view.getUint8(26) << 16);
       height = 1 + view.getUint8(27) + (view.getUint8(28) << 8) + (view.getUint8(29) << 16);
+    } else if (chunk === 0x56503820 && view.getUint8(23) === 0x9d && view.getUint8(24) === 0x01 && view.getUint8(25) === 0x2a) {
+      width = view.getUint16(26, true) & 0x3fff;
+      height = view.getUint16(28, true) & 0x3fff;
+    } else if (chunk === 0x5650384c && view.getUint8(20) === 0x2f) {
+      const bits = view.getUint32(21, true);
+      width = (bits & 0x3fff) + 1;
+      height = ((bits >>> 14) & 0x3fff) + 1;
     }
     return width && height ? { format: 'webp', width, height, displayWidth: width, displayHeight: height, orientation: 1 } : null;
   }
 
   function imageInfo(buffer) {
     const view = new DataView(buffer);
+    // Identify the container, not the extension or picker-supplied MIME type.
+    if (view.byteLength >= 16 && view.getUint32(4) === 0x66747970) {
+      const end = Math.min(view.byteLength, view.getUint32(0), 256);
+      const heifBrands = new Set([0x68656963, 0x68656978, 0x68657663, 0x68657678, 0x6865696d, 0x68656973, 0x6d696631, 0x6d736631]);
+      for (let offset = 8; offset + 4 <= end; offset += 4) {
+        if (offset !== 12 && heifBrands.has(view.getUint32(offset))) throw problem('heic-format');
+      }
+    }
     const info = readJpeg(view) || readPng(view) || readWebp(view);
     if (!info || !Number.isSafeInteger(info.width) || !Number.isSafeInteger(info.height) || info.width * info.height > MAX_SOURCE_PIXELS) {
       throw problem('invalid-image');
@@ -155,18 +175,38 @@
     return info;
   }
 
+  function readBytes(file, maximum) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => finish(problem('file-read-timeout')), FILE_READ_TIMEOUT_MS);
+      function finish(error, buffer) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (error) reject(error); else resolve(buffer);
+      }
+      // A cloud-backed picker may never complete arrayBuffer(). Late results are
+      // discarded; importantly, they must not start another decoder after timeout.
+      Promise.resolve().then(() => file.arrayBuffer()).then((buffer) => {
+        if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 1 || buffer.byteLength > maximum || buffer.byteLength !== file.size) {
+          finish(problem('file-read-failed'));
+        } else {
+          finish(null, buffer);
+        }
+      }, () => finish(problem('file-read-failed')));
+    });
+  }
+
   async function inspect(file) {
-    if (!file || typeof file.size !== 'number' || !Number.isFinite(file.size) || file.size < 1 || file.size > MAX_SOURCE_BYTES || typeof file.arrayBuffer !== 'function') {
+    if (!file || !Number.isSafeInteger(file.size) || file.size < 1 || file.size > MAX_SOURCE_BYTES || typeof file.arrayBuffer !== 'function' || typeof file.slice !== 'function') {
       throw problem('source-limit');
     }
-    let buffer;
-    try {
-      buffer = await file.arrayBuffer();
-    } catch {
-      throw problem('source-limit');
-    }
-    if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 1 || buffer.byteLength > MAX_SOURCE_BYTES) throw problem('source-limit');
-    return { buffer, info: imageInfo(buffer) };
+    // Native decoding needs only a bounded header, not an extra full-file copy.
+    return imageInfo(await readBytes(file.slice(0, MAX_HEADER_BYTES), MAX_HEADER_BYTES));
+  }
+
+  function progress(settings, stage) {
+    try { if (typeof settings.onProgress === 'function') settings.onProgress(stage); } catch {}
   }
 
   function scaledDimensions(width, height, maxSide) {
@@ -366,13 +406,14 @@
     let scratch;
     let output;
     try {
-      const inspected = await inspect(file);
-      input = inspected.buffer;
-      const info = inspected.info;
+      progress(settings, 'reading');
+      const info = await inspect(file);
       const pixels = info.width * info.height;
       if (info.format !== 'jpeg' && pixels > NATIVE_DECODE_PIXELS) throw problem('non-jpeg-limit');
 
       if (info.format === 'jpeg' && pixels > NATIVE_DECODE_PIXELS) {
+        input = await readBytes(file, MAX_SOURCE_BYTES);
+        progress(settings, 'decoding');
         record('decode-worker', 'start');
         const reduced = await workerDecode(input, settings.maxSide, settings.workerUrl);
         input = null; // Ownership transferred to the worker.
@@ -388,8 +429,9 @@
           clearCanvas(scratch);
           scratch = null;
         }
+        reduced.rgba = null;
       } else {
-        input = null;
+        progress(settings, 'decoding');
         source = await decodeNative(file, info, settings.maxSide);
         const width = source.source.width || source.source.naturalWidth;
         const height = source.source.height || source.source.naturalHeight;
@@ -400,6 +442,7 @@
         source = null;
       }
 
+      progress(settings, 'encoding');
       const blob = await encode(output.canvas, settings.quality);
       if (blob.size > settings.maxOutputBytes) throw problem('output-limit');
       record('compress', 'success');

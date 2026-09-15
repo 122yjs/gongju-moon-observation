@@ -98,6 +98,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   let uploadedFileId: string | null = null;
   let requestId: string | null = null;
+  let ownsReservation = false;
   try {
     assertSameOrigin(request);
     const session = await getStudentSession(request);
@@ -120,13 +121,8 @@ export async function POST(request: Request) {
       }
       throw new HttpError(409, "같은 사진을 처리하고 있습니다. 잠시 후 다시 확인해 주세요.");
     }
-
-    try {
-      await enforceSubmissionRateLimit(teacher.id, session.sid);
-    } catch (error) {
-      await releaseSubmission(input.requestId);
-      throw error;
-    }
+    ownsReservation = true;
+    await enforceSubmissionRateLimit(teacher.id, session.sid);
 
     const uploadedBytes = new Uint8Array(await input.photo.arrayBuffer());
     const image = detectImageType(uploadedBytes);
@@ -176,13 +172,18 @@ export async function POST(request: Request) {
         imageType: image.contentType,
         status: "visible",
       },
-    ]);
+    ]).catch(() => {
+      // Drive and Sheets are already committed. Gallery reads regenerate tickets;
+      // an optional preview-ticket failure must not report a failed submission.
+      console.warn("제출은 저장되었지만 갤러리 미리보기 준비를 완료하지 못했습니다.");
+    });
     return json(
       { ok: true, id: observationId, message: "교사 Google Drive에 달 관찰 사진을 제출했습니다." },
       { status: 201 },
     );
   } catch (error) {
-    if (requestId && !uploadedFileId) await releaseSubmission(requestId).catch(() => undefined);
+    // A duplicate or cross-class request does not own the active reservation.
+    if (ownsReservation && requestId && !uploadedFileId) await releaseSubmission(requestId).catch(() => undefined);
     return errorResponse(error);
   }
 }

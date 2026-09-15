@@ -495,8 +495,7 @@
     const MAX_OUTPUT_BYTES = 6 * 1024 * 1024;
     const IMAGE_MAX_SIDE = 2560;
     const IMAGE_QUALITY = 0.9;
-    const MAX_JPEG_PIXELS = 64 * 1000 * 1000;
-    const MAX_DECODE_PIXELS = 16 * 1000 * 1000;
+    const SUBMIT_TIMEOUT_MS = 90000;
     let photoProcessing = false;
     let submissionBusy = false;
     let cameraGeneration = 0;
@@ -1664,12 +1663,19 @@
     }
 
     function suspendPhotoPreviewForProcessing() {
+      // Hiding an <img> does not release its decoded pixels. Keep only the small
+      // compressed Blob so a failed replacement can restore the previous photo.
+      document.getElementById('photoPreview').removeAttribute('src');
+      if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+      previewObjectUrl = '';
       document.getElementById('photoPreviewWrap').classList.add('hidden');
       document.getElementById('photoPlaceholder').classList.remove('hidden');
     }
 
     function restorePhotoPreviewAfterProcessingError() {
-      if (compressedImageBlob && previewObjectUrl) {
+      if (compressedImageBlob) {
+        if (!previewObjectUrl) previewObjectUrl = URL.createObjectURL(compressedImageBlob);
+        document.getElementById('photoPreview').src = previewObjectUrl;
         document.getElementById('photoPlaceholder').classList.add('hidden');
         document.getElementById('photoPreviewWrap').classList.remove('hidden');
       } else {
@@ -1705,7 +1711,7 @@
         attachPhoto(await compressImage(file));
       } catch (error) {
         restorePhotoPreviewAfterProcessingError();
-        showPhotoStatus(error.message || '사진을 읽지 못했습니다.', true);
+        showPhotoStatus(photoErrorMessage(error) + (compressedImageBlob ? ' 이전에 첨부한 사진은 그대로 유지했어요.' : ''), true);
       } finally {
         event.target.value = '';
         setPhotoBusy(false);
@@ -1745,84 +1751,64 @@
       hidePhotoStatus();
     }
 
-    // Inspect only a bounded header, without allocating the original pixel buffer.
-    async function readPhotoDimensions(file) {
-      const data = new DataView(await file.slice(0, 256 * 1024).arrayBuffer());
-      const size = data.byteLength;
-      const u24 = (offset) => data.getUint8(offset) + data.getUint8(offset + 1) * 256 + data.getUint8(offset + 2) * 65536;
-      let width = 0;
-      let height = 0;
-      let orientation = 1;
-      let jpeg = false;
-      if (size >= 4 && data.getUint16(0) === 0xffd8) {
-        jpeg = true;
-        let offset = 2;
-        while (offset + 4 <= size) {
-          if (data.getUint8(offset++) !== 0xff) break;
-          while (offset < size && data.getUint8(offset) === 0xff) offset += 1;
-          if (offset >= size) break;
-          const marker = data.getUint8(offset++);
-          if (marker === 0xda || marker === 0xd9) break;
-          if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
-          if (offset + 2 > size) break;
-          const length = data.getUint16(offset);
-          if (length < 2 || offset + length > size) break;
-          const start = offset + 2;
-          if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker) && length >= 8) {
-            height = data.getUint16(start + 1);
-            width = data.getUint16(start + 3);
-          }
-          if (marker === 0xe1 && length >= 16 && data.getUint32(start) === 0x45786966 && data.getUint16(start + 4) === 0) {
-            const tiff = start + 6;
-            const little = data.getUint16(tiff) === 0x4949;
-            if ((little || data.getUint16(tiff) === 0x4d4d) && data.getUint16(tiff + 2, little) === 42) {
-              const directory = tiff + data.getUint32(tiff + 4, little);
-              const end = offset + length;
-              if (directory >= tiff + 8 && directory + 2 <= end) {
-                const count = data.getUint16(directory, little);
-                for (let i = 0; i < count && directory + 2 + (i + 1) * 12 <= end; i += 1) {
-                  const entry = directory + 2 + i * 12;
-                  if (data.getUint16(entry, little) === 0x112 && data.getUint16(entry + 2, little) === 3 && data.getUint32(entry + 4, little) === 1) {
-                    orientation = data.getUint16(entry + 8, little);
-                    break;
-                  }
-                }
-              }
-            }
-          }
-          offset += length;
-        }
-      } else if (size >= 24 && data.getUint32(0) === 0x89504e47 && data.getUint32(4) === 0x0d0a1a0a && data.getUint32(12) === 0x49484452) {
-        width = data.getUint32(16);
-        height = data.getUint32(20);
-      } else if (size >= 30 && data.getUint32(0) === 0x52494646 && data.getUint32(8) === 0x57454250) {
-        const chunk = data.getUint32(12);
-        if (chunk === 0x56503858) {
-          width = 1 + u24(24);
-          height = 1 + u24(27);
-        } else if (chunk === 0x56503820 && u24(23) === 0x2a019d) {
-          width = data.getUint16(26, true) & 0x3fff;
-          height = data.getUint16(28, true) & 0x3fff;
-        } else if (chunk === 0x5650384c && data.getUint8(20) === 0x2f) {
-          const bits = data.getUint32(21, true);
-          width = (bits & 0x3fff) + 1;
-          height = ((bits >>> 14) & 0x3fff) + 1;
-        }
-      }
-      if (!width || !height) throw new Error('사진 크기를 확인할 수 없습니다. JPG·PNG·WebP 사진을 선택하거나 페이지 안 카메라를 이용해 주세요.');
-      if (orientation >= 5 && orientation <= 8) [width, height] = [height, width];
-      return { width, height, jpeg };
-    }
-
     async function compressImage(file) {
-      const metadata = await readPhotoDimensions(file);
+      if (!globalThis.MoonPhotoPipeline) {
+        throw Object.assign(new Error('사진 처리 도구를 불러오지 못했어요. 페이지를 새로고침해 주세요.'), { code: 'pipeline-unavailable' });
+      }
       return MoonPhotoPipeline.compress(file, {
-        metadata,
         maxSide: IMAGE_MAX_SIDE,
         quality: IMAGE_QUALITY,
         maxOutputBytes: MAX_OUTPUT_BYTES,
         workerUrl: '/photo-worker.js',
+        onProgress(stage) {
+          const labels = {
+            reading: '선택한 사진을 읽고 있어요…',
+            decoding: '사진 크기를 안전하게 줄이고 있어요…',
+            encoding: '제출할 사진을 준비하고 있어요…',
+          };
+          if (photoProcessing && labels[stage]) showPhotoStatus(labels[stage], false);
+        },
       });
+    }
+
+    function photoErrorMessage(error) {
+      const code = error && error.code;
+      if (code === 'file-read-timeout' || code === 'file-read-failed') return '사진 파일을 읽지 못했어요. 사진 앱에서 원본을 완전히 내려받은 뒤 다시 선택해 주세요.';
+      if (code === 'heic-format') return '새로 선택한 사진은 HEIC·HEIF 형식이에요. JPEG(JPG)로 내보낸 사진을 선택하거나 페이지 안 카메라를 이용해 주세요.';
+      if (code === 'source-limit') return '원본 사진은 20MB 이하여야 해요. 일반 사진 모드로 촬영한 사진을 선택해 주세요.';
+      if (code === 'non-jpeg-limit') return '이 사진은 해상도가 너무 큰 PNG·WebP 파일이에요. JPEG(JPG)로 내보내거나 크기를 줄여 주세요.';
+      if (code === 'invalid-image' || code === 'invalid-jpeg') return '사진 형식이나 크기를 확인할 수 없어요. JPG·PNG·WebP 사진을 다시 선택해 주세요.';
+      if (code === 'output-limit') return '준비한 사진이 6MB를 넘었어요. 크기를 줄인 사진을 다시 선택해 주세요.';
+      if (code === 'pipeline-unavailable') return '사진 처리 도구를 불러오지 못했어요. 페이지를 새로고침해 주세요.';
+      if (code === 'worker-unavailable' || code === 'worker-failed' || code === 'codec-unavailable') return '고해상도 사진 처리 도구를 실행하지 못했어요. Safari 또는 Chrome에서 수업 링크를 다시 열거나 일반 사진 모드로 촬영해 주세요.';
+      if (code && code.endsWith('-timeout')) return '사진을 준비하는 데 시간이 너무 오래 걸려 중단했어요. 일반 사진 모드로 촬영한 사진으로 다시 시도해 주세요.';
+      return '사진을 준비하지 못했어요. 다른 사진을 선택하거나 아래의 페이지 안 카메라를 이용해 주세요.';
+    }
+
+    async function postObservation(formData) {
+      const controller = new AbortController();
+      let timer;
+      const deadline = new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error('전송 결과를 확인하지 못했어요. 사진과 입력 내용은 그대로 있어요. 우리반 달사진에서 제출 여부를 확인한 뒤, 없으면 같은 사진으로 다시 눌러 주세요.'));
+        }, SUBMIT_TIMEOUT_MS);
+      });
+      try {
+        return await Promise.race([deadline, (async () => {
+          const response = await fetch('/api/observations', {
+            method: 'POST', credentials: 'same-origin', body: formData, signal: controller.signal,
+          });
+          const result = await response.json().catch(() => null);
+          return { response, result };
+        })()]);
+      } catch (error) {
+        if (controller.signal.aborted) throw new Error('전송 결과를 확인하지 못했어요. 사진과 입력 내용은 그대로 있어요. 우리반 달사진에서 제출 여부를 확인한 뒤, 없으면 같은 사진으로 다시 눌러 주세요.');
+        if (error instanceof TypeError) throw new Error('인터넷 연결을 확인해 주세요. 사진과 입력 내용은 그대로 있어요. 제출 여부를 확인한 뒤 같은 사진으로 다시 시도해 주세요.');
+        throw error;
+      } finally {
+        clearTimeout(timer);
+      }
     }
 
     async function submitObservation(event) {
@@ -1833,6 +1819,7 @@
         return;
       }
       setSubmitBusy(true);
+      saveObservationDraft(true);
       showSubmitStatus('수업 제출함에 사진을 저장하고 있어요…', false);
 
       try {
@@ -1845,17 +1832,14 @@
         formData.append('memo', document.getElementById('memo').value.trim());
         formData.append('photo', compressedImageBlob, 'moon.jpg');
 
-        const response = await fetch('/api/observations', {
-          method: 'POST',
-          credentials: 'same-origin',
-          body: formData
-        });
-        const result = await response.json().catch(() => ({}));
+        const { response, result } = await postObservation(formData);
         if (response.status === 401) {
           hasClassSession = false;
-          await checkSession();
+          void checkSession();
         }
-        if (!response.ok) throw new Error(result.message || '사진을 제출하지 못했습니다.');
+        if (!response.ok) throw new Error(result?.message || (response.status === 429 ? '현재 제출이 많거나 저장 한도에 도달했어요. 사진을 보관한 채 선생님께 알려 주세요.' : '사진을 제출하지 못했습니다. 사진과 입력 내용은 그대로 있어요.'));
+        // A proxy/login HTML page with HTTP 200 is not a submission receipt.
+        if (result?.ok !== true || typeof result.id !== 'string' || !result.id) throw new Error('서버의 제출 확인을 받지 못했어요. 사진과 입력 내용은 그대로 있어요. 제출 여부를 확인한 뒤 다시 시도해 주세요.');
         showSubmitStatus(result.message || '사진을 제출했습니다.', false, true);
         document.getElementById('observationForm').reset();
         clearObservationDraft();

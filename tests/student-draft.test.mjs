@@ -23,7 +23,7 @@ async function page(saved, scope = 'class-a') {
     return elements.get(id);
   };
   const context = {
-    Blob, FormData, crypto,
+    Blob, FormData, crypto, AbortController,
     URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} },
     sessionStorage: saved, console, setTimeout: () => 0, clearTimeout() {},
     document: { addEventListener: (name, fn) => events.set(name, fn),
@@ -85,7 +85,7 @@ test('successful submission clears the draft without resurrecting it on pagehide
   first.element('studentName').value = '김학생';
   first.events.get('observationForm:input')({ target: first.element('studentName') });
   first.context.api.attachPhoto(new Blob(['photo'], { type: 'image/jpeg' }));
-  first.context.fetch = async () => ({ ok: true, status: 201, json: async () => ({ ok: true }) });
+  first.context.fetch = async () => ({ ok: true, status: 201, json: async () => ({ ok: true, id: 'saved-observation' }) });
   await first.context.api.submitObservation({ preventDefault() {} });
   first.events.get('pagehide')();
   assert.equal(saved.getItem('moon-observation-draft-v1'), null);
