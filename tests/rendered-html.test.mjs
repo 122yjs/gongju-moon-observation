@@ -112,8 +112,14 @@ test("requests only the non-sensitive drive.file OAuth scope", async () => {
 test("stores new student submissions only in teacher Drive and Sheets", async () => {
   const route = await readFile(new URL("../app/api/observations/route.ts", import.meta.url), "utf8");
   const drive = await readFile(new URL("../lib/google-drive.ts", import.meta.url), "utf8");
+  const observations = await readFile(new URL("../lib/observations.ts", import.meta.url), "utf8");
+  const studentHtml = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
   assert.match(route, /uploadObservationPhoto\(/);
   assert.match(route, /appendObservationRow\(/);
+  assert.match(route, /photoCapturedAt: input\.photoCapturedAt/);
+  assert.match(observations, /photoCapturedAt: string/);
+  assert.match(observations, /form\.get\("photoCapturedAt"\)/);
+  assert.match(studentHtml, /formData\.append\('photoCapturedAt', attachedPhotoCapturedAt\)/);
   assert.match(drive, /www\.googleapis\.com\/upload\/drive\/v3/);
   assert.match(drive, /sheets\.googleapis\.com\/v4/);
   assert.doesNotMatch(route, /BUCKET\.put|INSERT INTO observations|db\.add\(/);
@@ -137,10 +143,12 @@ test("opens a protected Korean-time summary while preserving the raw observation
   assert.match(drive, /properties: \{ timeZone: "Asia\/Seoul" \}/);
   assert.match(drive, /properties: \{ sheetId: teacher\.sheetId, hidden: true \}/);
   assert.match(drive, /"학생 설정 관찰 시각"/);
+  assert.match(drive, /"사진 촬영 시각 \(기기 기록\)"/);
   assert.match(drive, /"실제 제출 시각 \(UTC\)"/);
   assert.match(drive, /"교사 정정 관찰 시각"/);
   assert.match(drive, /"관찰 시각 정정 이력"/);
   assert.match(drive, /"학생 설정 관찰 시각 \(한국 시간\)"/);
+  assert.match(drive, /"사진 촬영 시각 \(기기 기록\)"/);
   assert.match(drive, /"실제 제출 시각 \(한국 시간\)"/);
   assert.match(drive, /TIME\(9,0,0\)/);
   assert.match(drive, /HYPERLINK\(\$\{raw\}!M2:M\$\{endRow\},"사진 열기"\)/);
@@ -150,7 +158,7 @@ test("opens a protected Korean-time summary while preserving the raw observation
   assert.match(drive, /updateObservationObservedAt/);
   assert.match(drive, /!N\$\{observation\.rowNumber\}:P\$\{observation\.rowNumber\}/);
 
-  assert.match(drive, /const range = `\$\{quoteSheetTitle\(teacher\.sheetTitle\)\}!A:P`/);
+  assert.match(drive, /const range = `\$\{quoteSheetTitle\(teacher\.sheetTitle\)\}!A:Q`/);
   assert.match(drive, /sheetId: teacher\.sheetId/);
   assert.match(drive, /sheetTitle,\s*\n\s*};/);
 
@@ -162,9 +170,12 @@ test("opens a protected Korean-time summary while preserving the raw observation
   assert.match(settingsRoute, /\/api\/admin\/spreadsheet\?classId=/);
   assert.match(adminObservationsRoute, /ensureTeacherSummarySheet\(accessToken, teacher\)/);
   assert.match(adminObservationsRoute, /originalObservedAt: item\.originalObservedAt/);
+  assert.match(adminObservationsRoute, /photoCapturedAt: item\.photoCapturedAt/);
   assert.match(adminObservationRoute, /updateObservationObservedAt/);
   assert.match(adminObservationRoute, /정정 사유를 2~120자로 입력해 주세요/);
   assert.match(adminPage, /학생 설정/);
+  assert.match(adminPage, /사진 촬영/);
+  assert.match(adminPage, /사진 촬영 시각과 학생 설정 시각이/);
   assert.match(adminPage, /실제 제출/);
   assert.match(adminPage, /관찰 시각 정정/);
   assert.match(adminPage, /최초 학생 입력값과 정정 이력은 Google Sheets에 보존됩니다/);

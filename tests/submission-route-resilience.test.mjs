@@ -98,6 +98,19 @@ test('a failed Sheets append retains the existing cleanup of the newly uploaded 
   assert.deepEqual(h.calls, [['rate'], ['upload'], ['delete', 'test-file'], ['release', 'test-request']]);
 });
 
+test('a new submission passes the available photo capture time into the teacher Sheet record', async () => {
+  let savedObservation;
+  const h = harness({
+    appendObservationRow: async (_token, _teacher, observation) => {
+      savedObservation = observation;
+      h.calls.push(['append']);
+    },
+  });
+  h.input.photoCapturedAt = '2026-09-15T19:42';
+  assert.equal((await h.post()).status, 201);
+  assert.equal(savedObservation?.photoCapturedAt, '2026-09-15T19:42');
+});
+
 test('a concurrent duplicate cannot remove the first request lock while its Drive upload is pending', async () => {
   let reserved = false;
   let finishUpload;

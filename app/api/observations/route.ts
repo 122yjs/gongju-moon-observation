@@ -148,6 +148,7 @@ export async function POST(request: Request) {
         studentNumber: input.studentNumber,
         studentName: input.studentName,
         observedAt: input.observedAt,
+        photoCapturedAt: input.photoCapturedAt,
         memo: input.memo,
         imageFileId: uploaded.id,
         imageType: image.contentType,

@@ -23,7 +23,7 @@ export default function PrivacyPage() {
         <p className="mt-2 text-sm leading-7 text-slate-300">교사는 관리 화면에서 언제든 연결을 해제할 수 있습니다. 이때 중앙 연결정보와 토큰은 삭제되고 Google 권한은 폐기됩니다. 교사 Drive의 수업 폴더와 학생 자료는 교사가 계속 소유하며 직접 보관하거나 삭제할 수 있습니다.</p>
 
         <h2 className="mt-7 text-xl font-black">보호 조치</h2>
-        <p className="mt-2 text-sm leading-7 text-slate-300">OAuth 토큰과 클라이언트 보안 비밀번호는 서버에서 AES-GCM 방식으로 암호화합니다. 학생·교사 세션은 서명된 HttpOnly·Secure 쿠키를 사용하며, 제출 사진은 위치정보 등 메타데이터를 제거한 뒤 전송합니다.</p>
+        <p className="mt-2 text-sm leading-7 text-slate-300">OAuth 토큰과 클라이언트 보안 비밀번호는 서버에서 AES-GCM 방식으로 암호화합니다. 학생·교사 세션은 서명된 HttpOnly·Secure 쿠키를 사용합니다. 사진에서 확인 가능한 촬영 시각은 관찰 시각 확인을 위해 교사 소유 Google Sheets 제출 기록에 함께 저장할 수 있으며, GPS 등 위치정보를 포함한 나머지 사진 메타데이터는 제거한 뒤 사진을 전송합니다. 촬영 시각은 중앙 D1에는 저장하지 않습니다.</p>
 
         <div className="mt-8 flex flex-wrap gap-3"><Link href="/" className="rounded-xl bg-amber-500 px-5 py-3 font-black text-space-950">학생 화면</Link><Link href="/admin" className="rounded-xl border border-space-600 px-5 py-3 font-bold">교사 화면</Link><Link href="/data-deletion" className="rounded-xl border border-space-600 px-5 py-3 font-bold">자료 삭제 안내</Link></div>
       </article>

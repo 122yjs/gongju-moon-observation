@@ -8,6 +8,7 @@ export interface ObservationInput {
   studentNumber: number;
   studentName: string;
   observedAt: string;
+  photoCapturedAt: string;
   memo: string;
   photo: File;
 }
@@ -51,6 +52,28 @@ export function validateObservationForm(form: FormData): ObservationInput {
     throw new HttpError(400, "관찰 시각은 최근 90일 이내의 날짜로 입력해 주세요.");
   }
 
+  const photoCapturedAt = normalizeText(form.get("photoCapturedAt") ?? "", 16, "사진 촬영 시각");
+  if (photoCapturedAt) {
+    if (!OBSERVED_AT_PATTERN.test(photoCapturedAt)) {
+      throw new HttpError(400, "사진 촬영 시각 형식이 올바르지 않습니다.");
+    }
+    const capturedDate = new Date(`${photoCapturedAt}:00+09:00`);
+    const normalizedCapturedAt = Number.isNaN(capturedDate.getTime())
+      ? ""
+      : new Intl.DateTimeFormat("sv-SE", {
+          timeZone: "Asia/Seoul",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }).format(capturedDate).replace(" ", "T");
+    if (normalizedCapturedAt !== photoCapturedAt) {
+      throw new HttpError(400, "사진 촬영 시각을 확인해 주세요.");
+    }
+  }
+
   const memo = normalizeText(form.get("memo") ?? "", 300, "관찰 기록", { allowLineBreaks: true });
   const photo = form.get("photo");
   if (!(photo instanceof File)) throw new HttpError(400, "달 사진을 선택해 주세요.");
@@ -58,7 +81,7 @@ export function validateObservationForm(form: FormData): ObservationInput {
     throw new HttpError(413, "압축된 사진은 6MB 이하여야 합니다.");
   }
 
-  return { requestId, studentNumber, studentName, observedAt, memo, photo };
+  return { requestId, studentNumber, studentName, observedAt, photoCapturedAt, memo, photo };
 }
 
 export function detectImageType(bytes: Uint8Array) {

@@ -10,6 +10,7 @@ interface Observation {
   studentName: string;
   observedAt: string;
   originalObservedAt: string;
+  photoCapturedAt: string | null;
   correctedObservedAt: string | null;
   correctedAt: string | null;
   memo: string;
@@ -54,6 +55,24 @@ function timeGapSummary(item: Observation) {
     return { text: `학생 설정 시각이 실제 제출보다 ${duration} 뒤입니다.`, needsReview: absolute >= 5 };
   }
   return { text: `학생 설정 시각 기준 ${duration} 뒤에 제출했습니다.`, needsReview: minutes >= 120 };
+}
+
+function photoTimeGapSummary(item: Observation) {
+  if (!item.photoCapturedAt) return null;
+  const studentValue = item.originalObservedAt || item.observedAt;
+  const student = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(studentValue)
+    ? new Date(`${studentValue}:00+09:00`)
+    : null;
+  const captured = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(item.photoCapturedAt)
+    ? new Date(`${item.photoCapturedAt}:00+09:00`)
+    : null;
+  if (!student || !captured || !Number.isFinite(student.getTime()) || !Number.isFinite(captured.getTime())) return null;
+  const absolute = Math.round(Math.abs(student.getTime() - captured.getTime()) / 60000);
+  if (absolute <= 30) return null;
+  const duration = absolute >= 60
+    ? `${Math.floor(absolute / 60)}시간${absolute % 60 ? ` ${absolute % 60}분` : ""}`
+    : `${absolute}분`;
+  return `사진 촬영 시각과 학생 설정 시각이 ${duration} 다릅니다.`;
 }
 
 interface ClassInfo {
@@ -825,8 +844,13 @@ export default function AdminPage() {
                   <div className="flex items-center justify-between gap-2"><h3 className="font-black">{item.studentNumber}번 {item.studentName}</h3><span className="text-xs text-slate-500">{Math.ceil(item.imageBytes / 1024)}KB</span></div>
                   <div className="mt-3 space-y-1 rounded-xl border border-space-700 bg-space-900/70 p-3 text-xs leading-5">
                     <p className="text-slate-300"><span className="font-bold text-slate-400">학생 설정</span> · {formatObservedAt(item.originalObservedAt || item.observedAt)}</p>
+                    {item.photoCapturedAt ? <p className="text-slate-300"><span className="font-bold text-slate-400">사진 촬영</span> · {formatObservedAt(item.photoCapturedAt)}</p> : null}
                     {item.correctedObservedAt ? <p className="text-emerald-200"><span className="font-bold">교사 정정</span> · {formatObservedAt(item.correctedObservedAt)}</p> : null}
                     <p className="text-slate-300"><span className="font-bold text-slate-400">실제 제출</span> · {formatSubmittedAt(item.createdAt)}</p>
+                    {(() => {
+                      const photoGap = photoTimeGapSummary(item);
+                      return photoGap ? <p className="font-bold text-amber-300">확인 필요 · {photoGap}</p> : null;
+                    })()}
                     {(() => {
                       const gap = timeGapSummary(item);
                       return gap ? <p className={gap.needsReview ? "font-bold text-amber-300" : "text-slate-500"}>{gap.needsReview ? "확인 필요 · " : ""}{gap.text}</p> : null;

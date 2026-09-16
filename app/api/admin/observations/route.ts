@@ -39,6 +39,7 @@ export async function GET(request: Request) {
         studentName: item.studentName,
         observedAt: item.observedAt,
         originalObservedAt: item.originalObservedAt || item.observedAt,
+        photoCapturedAt: item.photoCapturedAt || null,
         correctedObservedAt: item.correctedObservedAt || null,
         correctedAt: item.correctedAt || null,
         memo: item.memo,

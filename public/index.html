@@ -268,7 +268,7 @@
         </div>
         <aside class="mt-4 rounded-2xl border-2 border-amber-400/60 bg-amber-400/10 px-4 py-3.5 shadow-lg shadow-amber-500/10" aria-label="사진 개인정보 보호 안내">
           <p class="flex items-center gap-2 text-sm font-black text-amber-100"><span aria-hidden="true">🔒</span> 개인정보가 보이지 않게 촬영해요</p>
-          <p class="mt-1.5 text-xs font-medium leading-5 text-amber-50/90">얼굴, 집 주소, 차량 번호는 나오지 않게 달과 하늘 중심으로 찍어 주세요. 촬영 시각은 관찰 시간 확인에만 기기 안에서 사용하고, 위치정보를 포함한 사진 메타데이터는 압축할 때 제거됩니다.</p>
+          <p class="mt-1.5 text-xs font-medium leading-5 text-amber-50/90">얼굴, 집 주소, 차량 번호는 나오지 않게 달과 하늘 중심으로 찍어 주세요. 확인 가능한 촬영 시각은 선생님이 관찰 시간을 확인할 수 있도록 제출 기록에 함께 남고, 위치정보를 포함한 나머지 사진 메타데이터는 압축할 때 제거됩니다.</p>
         </aside>
         <button type="button" id="openCompassButton" onclick="openCompass()" aria-haspopup="dialog" aria-controls="compassIntroDialog" class="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-space-600 bg-space-900/70 px-4 py-3 text-sm font-bold text-slate-200 transition hover:border-blue-400/50 hover:bg-blue-400/10 hover:text-blue-100">
           <span aria-hidden="true">🧭</span>
@@ -2241,6 +2241,7 @@
         formData.append('studentNumber', document.getElementById('studentNumber').value);
         formData.append('studentName', document.getElementById('studentName').value.trim());
         formData.append('observedAt', document.getElementById('observedAt').value);
+        if (attachedPhotoCapturedAt) formData.append('photoCapturedAt', attachedPhotoCapturedAt);
         formData.append('memo', document.getElementById('memo').value.trim());
         formData.append('photo', compressedImageBlob, 'moon.jpg');
 
