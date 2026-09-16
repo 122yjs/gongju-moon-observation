@@ -54,8 +54,8 @@ export async function GET(request: Request) {
     }
     const studentNumberText = url.searchParams.get("studentNumber")?.trim() || "";
     const studentNumber = studentNumberText ? Number(studentNumberText) : null;
-    if (studentNumber !== null && (!Number.isInteger(studentNumber) || studentNumber < 1 || studentNumber > 50)) {
-      throw new HttpError(400, "출석번호 필터는 1번부터 50번까지 입력해 주세요.");
+    if (studentNumber !== null && (!Number.isInteger(studentNumber) || studentNumber < 1 || studentNumber > 100)) {
+      throw new HttpError(400, "출석번호 필터는 1번부터 100번까지 입력해 주세요.");
     }
 
     const accessToken = await getTeacherAccessToken(teacher);

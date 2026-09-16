@@ -278,7 +278,7 @@
         <form id="observationForm" class="mt-6 space-y-5" onsubmit="submitObservation(event)">
           <div class="grid gap-4 sm:grid-cols-2">
             <label class="block text-sm font-bold">번호
-              <input id="studentNumber" name="studentNumber" type="number" min="1" max="50" required placeholder="예: 5" class="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white placeholder:text-slate-600">
+              <input id="studentNumber" name="studentNumber" type="number" min="1" max="100" required placeholder="예: 5" class="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white placeholder:text-slate-600">
             </label>
             <label class="block text-sm font-bold">이름
               <input id="studentName" name="studentName" type="text" maxlength="20" required autocomplete="off" placeholder="예: 홍길동" class="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white placeholder:text-slate-600">
@@ -483,7 +483,7 @@
             <input id="galleryObservedDateFilter" type="date" class="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white">
           </label>
           <label class="block text-sm font-bold">제출자 출석번호
-            <input id="galleryStudentNumberFilter" type="number" min="1" max="50" placeholder="전체" class="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white placeholder:text-slate-600">
+            <input id="galleryStudentNumberFilter" type="number" min="1" max="100" placeholder="전체" class="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white placeholder:text-slate-600">
           </label>
           <button type="submit" class="min-h-12 rounded-xl bg-amber-500 px-4 py-3 font-black text-space-950 hover:bg-amber-400">모아보기</button>
           <button type="button" onclick="clearGalleryFilters()" class="min-h-12 rounded-xl border border-space-600 bg-space-900 px-4 py-3 font-bold text-slate-300 hover:border-space-500">초기화</button>

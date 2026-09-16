@@ -52,9 +52,11 @@ test("labels the class gallery and filters it by observation date and attendance
   assert.match(html, /data-view="gallery"[^>]*>우리반 달사진 보기<\/button>/);
   assert.match(html, /id="galleryHeading"[^>]*>우리반 달사진 보기/);
   assert.match(html, /id="galleryObservedDateFilter"[^>]*type="date"/);
-  assert.match(html, /id="galleryStudentNumberFilter"[^>]*type="number"[^>]*min="1"[^>]*max="50"/);
+  assert.match(html, /id="galleryStudentNumberFilter"[^>]*type="number"[^>]*min="1"[^>]*max="100"/);
+  assert.match(html, /id="studentNumber"[^>]*type="number"[^>]*min="1"[^>]*max="100"/);
   assert.match(route, /url\.searchParams\.get\("observedDate"\)/);
   assert.match(route, /url\.searchParams\.get\("studentNumber"\)/);
+  assert.match(route, /studentNumber > 100/);
   assert.match(drive, /row\.observedAt\.startsWith\(`\$\{options\.observedDate\}T`\)/);
   assert.match(drive, /row\.studentNumber === options\.studentNumber/);
 });

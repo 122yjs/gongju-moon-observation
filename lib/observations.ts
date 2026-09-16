@@ -34,8 +34,8 @@ export function validateObservationForm(form: FormData): ObservationInput {
 
   const numberText = normalizeText(form.get("studentNumber"), 3, "학생 번호");
   const studentNumber = Number(numberText);
-  if (!Number.isInteger(studentNumber) || studentNumber < 1 || studentNumber > 50) {
-    throw new HttpError(400, "학생 번호는 1번부터 50번까지 입력해 주세요.");
+  if (!Number.isInteger(studentNumber) || studentNumber < 1 || studentNumber > 100) {
+    throw new HttpError(400, "학생 번호는 1번부터 100번까지 입력해 주세요.");
   }
 
   const studentName = normalizeText(form.get("studentName"), 20, "학생 이름");
