@@ -77,7 +77,14 @@
     if (options.workerUrl !== undefined && (typeof options.workerUrl !== 'string' || !options.workerUrl)) {
       throw problem('invalid-options');
     }
-    return { maxSide, maxOutputBytes, quality, workerUrl: options.workerUrl || '/photo-worker.js', onProgress: options.onProgress };
+    return {
+      maxSide,
+      maxOutputBytes,
+      quality,
+      workerUrl: options.workerUrl || '/photo-worker.js',
+      onProgress: options.onProgress,
+      onMetadata: options.onMetadata,
+    };
   }
 
   function readJpeg(view) {
@@ -85,6 +92,7 @@
     let offset = 2;
     const end = Math.min(view.byteLength, 1024 * 1024);
     let orientation = 1;
+    let capturedAt = '';
     while (offset + 4 <= end) {
       if (view.getUint8(offset++) !== 0xff) return null;
       while (offset < end && view.getUint8(offset) === 0xff) offset += 1;
@@ -103,9 +111,20 @@
         const width = view.getUint16(start + 3);
         if (!width || !height) return null;
         const sideways = orientation >= 5 && orientation <= 8;
-        return { format: 'jpeg', width, height, displayWidth: sideways ? height : width, displayHeight: sideways ? width : height, orientation };
+        return {
+          format: 'jpeg',
+          width,
+          height,
+          displayWidth: sideways ? height : width,
+          displayHeight: sideways ? width : height,
+          orientation,
+          capturedAt: capturedAt || null,
+        };
       }
-      if (marker === 0xe1) orientation = readExifOrientation(view, start, segmentEnd) || orientation;
+      if (marker === 0xe1) {
+        orientation = readExifOrientation(view, start, segmentEnd) || orientation;
+        capturedAt = capturedAt || readExifCaptureTime(view, start, segmentEnd) || '';
+      }
       offset = segmentEnd;
     }
     return null;
@@ -130,6 +149,86 @@
       }
     }
     return 1;
+  }
+
+  function exifDirectory(view, tiff, end, little, relativeOffset) {
+    const directory = tiff + relativeOffset;
+    if (directory < tiff + 8 || directory + 2 > end) return null;
+    const entries = Math.min(view.getUint16(directory, little), 256);
+    if (directory + 2 + entries * 12 > end) return null;
+    return { directory, entries };
+  }
+
+  function findExifEntry(view, directoryInfo, little, tag) {
+    if (!directoryInfo) return null;
+    for (let index = 0; index < directoryInfo.entries; index += 1) {
+      const entry = directoryInfo.directory + 2 + index * 12;
+      if (view.getUint16(entry, little) === tag) return entry;
+    }
+    return null;
+  }
+
+  function exifAscii(view, entry, tiff, end, little) {
+    if (entry == null || entry + 12 > end || view.getUint16(entry + 2, little) !== 2) return '';
+    const count = view.getUint32(entry + 4, little);
+    if (!Number.isSafeInteger(count) || count < 2 || count > 128) return '';
+    const offset = count <= 4 ? entry + 8 : tiff + view.getUint32(entry + 8, little);
+    if (offset < tiff || offset + count > end) return '';
+    let value = '';
+    for (let index = 0; index < count; index += 1) {
+      const byte = view.getUint8(offset + index);
+      if (byte === 0) break;
+      if (byte < 0x20 || byte > 0x7e) return '';
+      value += String.fromCharCode(byte);
+    }
+    return value.trim();
+  }
+
+  function exifLong(view, entry, end, little) {
+    if (entry == null || entry + 12 > end) return null;
+    const type = view.getUint16(entry + 2, little);
+    const count = view.getUint32(entry + 4, little);
+    if (count !== 1) return null;
+    if (type === 4) return view.getUint32(entry + 8, little);
+    if (type === 3) return view.getUint16(entry + 8, little);
+    return null;
+  }
+
+  function normalizeExifDateTime(value) {
+    const match = /^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(value);
+    if (!match) return '';
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const hour = Number(match[4]);
+    const minute = Number(match[5]);
+    const second = Number(match[6]);
+    if (year < 2000 || year > 2100 || month < 1 || month > 12 || hour > 23 || minute > 59 || second > 59) return '';
+    const daysInMonth = new Date(year, month, 0).getDate();
+    if (day < 1 || day > daysInMonth) return '';
+    return `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}`;
+  }
+
+  function readExifCaptureTime(view, start, end) {
+    if (start + 14 > end || view.getUint32(start) !== 0x45786966 || view.getUint16(start + 4) !== 0) return '';
+    const tiff = start + 6;
+    const byteOrder = view.getUint16(tiff);
+    if (byteOrder !== 0x4949 && byteOrder !== 0x4d4d) return '';
+    const little = byteOrder === 0x4949;
+    if (tiff + 8 > end || view.getUint16(tiff + 2, little) !== 42) return '';
+    const ifd0 = exifDirectory(view, tiff, end, little, view.getUint32(tiff + 4, little));
+    if (!ifd0) return '';
+
+    const exifOffset = exifLong(view, findExifEntry(view, ifd0, little, 0x8769), end, little);
+    if (Number.isSafeInteger(exifOffset)) {
+      const exifIfd = exifDirectory(view, tiff, end, little, exifOffset);
+      const original = exifAscii(view, findExifEntry(view, exifIfd, little, 0x9003), tiff, end, little);
+      const digitized = exifAscii(view, findExifEntry(view, exifIfd, little, 0x9004), tiff, end, little);
+      const normalized = normalizeExifDateTime(original || digitized);
+      if (normalized) return normalized;
+    }
+
+    return normalizeExifDateTime(exifAscii(view, findExifEntry(view, ifd0, little, 0x0132), tiff, end, little));
   }
 
   function readPng(view) {
@@ -408,6 +507,13 @@
     try {
       progress(settings, 'reading');
       const info = await inspect(file);
+      try {
+        if (typeof settings.onMetadata === 'function') {
+          settings.onMetadata({ format: info.format, capturedAt: info.capturedAt || null });
+        }
+      } catch {
+        // Metadata hints are optional and must never break image preparation.
+      }
       const pixels = info.width * info.height;
       if (info.format !== 'jpeg' && pixels > NATIVE_DECODE_PIXELS) throw problem('non-jpeg-limit');
 

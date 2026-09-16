@@ -268,7 +268,7 @@
         </div>
         <aside class="mt-4 rounded-2xl border-2 border-amber-400/60 bg-amber-400/10 px-4 py-3.5 shadow-lg shadow-amber-500/10" aria-label="사진 개인정보 보호 안내">
           <p class="flex items-center gap-2 text-sm font-black text-amber-100"><span aria-hidden="true">🔒</span> 개인정보가 보이지 않게 촬영해요</p>
-          <p class="mt-1.5 text-xs font-medium leading-5 text-amber-50/90">얼굴, 집 주소, 차량 번호는 나오지 않게 달과 하늘 중심으로 찍어 주세요. 사진의 위치정보는 압축할 때 제거됩니다.</p>
+          <p class="mt-1.5 text-xs font-medium leading-5 text-amber-50/90">얼굴, 집 주소, 차량 번호는 나오지 않게 달과 하늘 중심으로 찍어 주세요. 촬영 시각은 관찰 시간 확인에만 기기 안에서 사용하고, 위치정보를 포함한 사진 메타데이터는 압축할 때 제거됩니다.</p>
         </aside>
         <button type="button" id="openCompassButton" onclick="openCompass()" aria-haspopup="dialog" aria-controls="compassIntroDialog" class="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-space-600 bg-space-900/70 px-4 py-3 text-sm font-bold text-slate-200 transition hover:border-blue-400/50 hover:bg-blue-400/10 hover:text-blue-100">
           <span aria-hidden="true">🧭</span>
@@ -287,6 +287,19 @@
           <label class="block text-sm font-bold">관찰 날짜와 시간
             <input id="observedAt" name="observedAt" type="datetime-local" required class="mt-2 w-full rounded-xl border border-space-600 bg-space-900 px-4 py-3 text-white">
           </label>
+          <section id="observationTimeReview" class="hidden rounded-2xl border-2 border-amber-400/60 bg-amber-400/10 p-4 shadow-lg shadow-amber-500/10" role="alert" aria-live="assertive" aria-labelledby="observationTimeReviewTitle">
+            <h3 id="observationTimeReviewTitle" class="font-black text-amber-100">달을 관찰한 시간을 확인해 주세요.</h3>
+            <div class="mt-2 space-y-1 text-sm leading-6 text-amber-50">
+              <p>사진에 기록된 촬영 시각: <strong id="photoCapturedAtText"></strong></p>
+              <p>입력한 관찰 시각: <strong id="studentObservedAtText"></strong></p>
+              <p id="observationTimeGapText" class="text-xs font-bold text-amber-200"></p>
+            </div>
+            <div class="mt-4 grid gap-2 sm:grid-cols-3">
+              <button type="button" onclick="usePhotoCaptureTime()" class="min-h-11 rounded-xl bg-amber-400 px-3 py-2.5 text-xs font-black text-space-950 hover:bg-amber-300">사진 촬영 시각으로 바꾸기</button>
+              <button type="button" onclick="editObservationTime()" class="min-h-11 rounded-xl border border-amber-300/40 bg-space-900 px-3 py-2.5 text-xs font-bold text-amber-100">직접 수정하기</button>
+              <button type="button" onclick="keepObservationTime()" class="min-h-11 rounded-xl border border-space-600 bg-space-900 px-3 py-2.5 text-xs font-bold text-slate-200">입력한 시각이 맞아요</button>
+            </div>
+          </section>
 
           <div>
             <span class="block text-sm font-bold">달 사진</span>
@@ -547,6 +560,7 @@
     const IMAGE_MAX_SIDE = 2560;
     const IMAGE_QUALITY = 0.9;
     const SUBMIT_TIMEOUT_MS = 90000;
+    const PHOTO_TIME_REVIEW_THRESHOLD_MINUTES = 30;
     let photoProcessing = false;
     let submissionBusy = false;
     let cameraGeneration = 0;
@@ -554,6 +568,8 @@
     let calendarYear = selectedDate.getFullYear();
     let calendarMonth = selectedDate.getMonth();
     let compressedImageBlob = null;
+    let attachedPhotoCapturedAt = '';
+    let observationTimeAcknowledgedKey = '';
     let previewObjectUrl = '';
     let pendingRequestId = '';
     let galleryCursor = null;
@@ -951,6 +967,8 @@
       renderToday();
       renderCalendar();
       initObservationDraft();
+      const observedAtInput = document.getElementById('observedAt');
+      if (observedAtInput) observedAtInput.addEventListener('input', renderObservationTimeReview);
       initPwaInstallExperience();
       checkSession();
       window.addEventListener('pagehide', () => {
@@ -1498,6 +1516,98 @@
       document.getElementById('observedAt').value = `${formatDateInput(now)}T${hours}:${minutes}`;
     }
 
+    function localDateTimeInputValue(date) {
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${formatDateInput(date)}T${hours}:${minutes}`;
+    }
+
+    function localDateTimeMillis(value) {
+      const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value || '');
+      if (!match) return NaN;
+      const year = Number(match[1]);
+      const month = Number(match[2]);
+      const day = Number(match[3]);
+      const hour = Number(match[4]);
+      const minute = Number(match[5]);
+      const date = new Date(year, month - 1, day, hour, minute, 0, 0);
+      if (
+        date.getFullYear() !== year ||
+        date.getMonth() !== month - 1 ||
+        date.getDate() !== day ||
+        date.getHours() !== hour ||
+        date.getMinutes() !== minute
+      ) return NaN;
+      return date.getTime();
+    }
+
+    function formatObservationTimeForStudent(value) {
+      const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value || '');
+      if (!match) return value || '-';
+      const hour = Number(match[4]);
+      const period = hour < 12 ? '오전' : '오후';
+      const displayHour = hour % 12 || 12;
+      return `${Number(match[2])}월 ${Number(match[3])}일 ${period} ${displayHour}:${match[5]}`;
+    }
+
+    function observationTimeReviewState() {
+      const observedAt = document.getElementById('observedAt')?.value || '';
+      const capturedAtMs = localDateTimeMillis(attachedPhotoCapturedAt);
+      const observedAtMs = localDateTimeMillis(observedAt);
+      if (!attachedPhotoCapturedAt || !Number.isFinite(capturedAtMs) || !Number.isFinite(observedAtMs)) return null;
+      const gapMinutes = Math.round(Math.abs(observedAtMs - capturedAtMs) / 60000);
+      const key = `${attachedPhotoCapturedAt}|${observedAt}`;
+      return {
+        observedAt,
+        capturedAt: attachedPhotoCapturedAt,
+        gapMinutes,
+        key,
+        needsDecision: gapMinutes > PHOTO_TIME_REVIEW_THRESHOLD_MINUTES && observationTimeAcknowledgedKey !== key,
+      };
+    }
+
+    function renderObservationTimeReview() {
+      const review = document.getElementById('observationTimeReview');
+      if (!review) return;
+      const state = observationTimeReviewState();
+      if (!state || !state.needsDecision) {
+        review.classList.add('hidden');
+        return;
+      }
+      document.getElementById('photoCapturedAtText').textContent = formatObservationTimeForStudent(state.capturedAt);
+      document.getElementById('studentObservedAtText').textContent = formatObservationTimeForStudent(state.observedAt);
+      const hours = Math.floor(state.gapMinutes / 60);
+      const minutes = state.gapMinutes % 60;
+      const gapText = hours > 0 ? `${hours}시간${minutes ? ` ${minutes}분` : ''}` : `${minutes}분`;
+      document.getElementById('observationTimeGapText').textContent = `두 시각이 약 ${gapText} 달라요. 30분 이내 차이는 자연스러운 제출로 보고 따로 확인하지 않아요.`;
+      review.classList.remove('hidden');
+    }
+
+    function usePhotoCaptureTime() {
+      if (!attachedPhotoCapturedAt) return;
+      const input = document.getElementById('observedAt');
+      input.value = attachedPhotoCapturedAt;
+      observationTimeAcknowledgedKey = '';
+      draftHasEdits = true;
+      saveObservationDraft(true);
+      renderObservationTimeReview();
+      showToast('사진 촬영 시각으로 관찰 시간을 바꿨어요.');
+    }
+
+    function editObservationTime() {
+      const input = document.getElementById('observedAt');
+      if (input && typeof input.focus === 'function') input.focus();
+      showToast('위의 관찰 날짜와 시간을 직접 고쳐 주세요.');
+    }
+
+    function keepObservationTime() {
+      const state = observationTimeReviewState();
+      if (!state) return;
+      observationTimeAcknowledgedKey = state.key;
+      renderObservationTimeReview();
+      showToast('학생이 입력한 관찰 시각을 그대로 사용할게요.');
+    }
+
     function dateFromInput(value) {
       const [year, month, day] = value.split('-').map(Number);
       return new Date(year, month - 1, day, 12, 0, 0);
@@ -1893,6 +2003,7 @@
         return;
       }
 
+      const capturedAt = localDateTimeInputValue(new Date());
       setPhotoBusy(true);
       releasePhoto();
       const scale = Math.min(1, IMAGE_MAX_SIDE / Math.max(video.videoWidth, video.videoHeight));
@@ -1910,7 +2021,7 @@
           try {
             if (!blob || !blob.size) throw new Error('사진을 촬영하지 못했습니다. 다시 시도해 주세요.');
             if (blob.size > MAX_OUTPUT_BYTES) throw new Error('촬영한 사진이 6MB를 넘습니다. 더 작은 사진을 선택해 주세요.');
-            attachPhoto(blob);
+            attachPhoto(blob, capturedAt);
           } catch (error) {
             showPhotoStatus(error.message, true);
           } finally {
@@ -1951,6 +2062,7 @@
         document.getElementById('photoPreview').src = previewObjectUrl;
         document.getElementById('photoPlaceholder').classList.add('hidden');
         document.getElementById('photoPreviewWrap').classList.remove('hidden');
+        renderObservationTimeReview();
       } else {
         releasePhoto();
       }
@@ -1981,7 +2093,11 @@
       event.target.value = '';
       showPhotoStatus('사진을 제출용으로 준비하고 있어요…', false);
       try {
-        attachPhoto(await compressImage(file));
+        let capturedAt = '';
+        const blob = await compressImage(file, (metadata) => {
+          capturedAt = metadata && typeof metadata.capturedAt === 'string' ? metadata.capturedAt : '';
+        });
+        attachPhoto(blob, capturedAt);
       } catch (error) {
         restorePhotoPreviewAfterProcessingError();
         showPhotoStatus(photoErrorMessage(error) + (compressedImageBlob ? ' 이전에 첨부한 사진은 그대로 유지했어요.' : ''), true);
@@ -2008,13 +2124,18 @@
       if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
       previewObjectUrl = '';
       compressedImageBlob = null;
+      attachedPhotoCapturedAt = '';
+      observationTimeAcknowledgedKey = '';
       pendingRequestId = '';
       document.getElementById('photoPreviewWrap').classList.add('hidden');
       document.getElementById('photoPlaceholder').classList.remove('hidden');
+      renderObservationTimeReview();
     }
 
-    function attachPhoto(blob) {
+    function attachPhoto(blob, capturedAt = '') {
       compressedImageBlob = blob;
+      attachedPhotoCapturedAt = capturedAt;
+      observationTimeAcknowledgedKey = '';
       pendingRequestId = '';
       if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
       previewObjectUrl = URL.createObjectURL(blob);
@@ -2022,9 +2143,16 @@
       document.getElementById('photoPlaceholder').classList.add('hidden');
       document.getElementById('photoPreviewWrap').classList.remove('hidden');
       hidePhotoStatus();
+      renderObservationTimeReview();
+      const timeReview = observationTimeReviewState();
+      if (timeReview && timeReview.needsDecision) {
+        const review = document.getElementById('observationTimeReview');
+        if (review && typeof review.scrollIntoView === 'function') review.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        showToast('사진 촬영 시각과 입력한 시간이 30분 넘게 달라요. 관찰 시간을 확인해 주세요.');
+      }
     }
 
-    async function compressImage(file) {
+    async function compressImage(file, onMetadata) {
       if (!globalThis.MoonPhotoPipeline) {
         throw Object.assign(new Error('사진 처리 도구를 불러오지 못했어요. 페이지를 새로고침해 주세요.'), { code: 'pipeline-unavailable' });
       }
@@ -2040,6 +2168,9 @@
             encoding: '제출할 사진을 준비하고 있어요…',
           };
           if (photoProcessing && labels[stage]) showPhotoStatus(labels[stage], false);
+        },
+        onMetadata(metadata) {
+          if (typeof onMetadata === 'function') onMetadata(metadata);
         },
       });
     }
@@ -2091,6 +2222,14 @@
         showPhotoStatus('달 사진을 먼저 촬영하거나 선택해 주세요.', true);
         return;
       }
+      const timeReview = observationTimeReviewState();
+      if (timeReview && timeReview.needsDecision) {
+        renderObservationTimeReview();
+        const review = document.getElementById('observationTimeReview');
+        if (review && typeof review.scrollIntoView === 'function') review.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        showSubmitStatus('사진 촬영 시각과 입력한 관찰 시각이 30분 넘게 달라요. 시간을 확인한 뒤 세 가지 선택지 중 하나를 눌러 주세요.', true);
+        return;
+      }
       setSubmitBusy(true);
       saveObservationDraft(true);
       showSubmitStatus('수업 제출함에 사진을 저장하고 있어요…', false);
@@ -2119,12 +2258,15 @@
         document.getElementById('captureInput').value = '';
         document.getElementById('photoInput').value = '';
         compressedImageBlob = null;
+        attachedPhotoCapturedAt = '';
+        observationTimeAcknowledgedKey = '';
         pendingRequestId = '';
         if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
         previewObjectUrl = '';
         document.getElementById('photoPreview').removeAttribute('src');
         document.getElementById('photoPreviewWrap').classList.add('hidden');
         document.getElementById('photoPlaceholder').classList.remove('hidden');
+        renderObservationTimeReview();
         hidePhotoStatus();
         stopCamera();
         setObservedAtNow();

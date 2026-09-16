@@ -18,6 +18,44 @@ function jpeg(width, height, name = 'moon.jpg') {
   return file;
 }
 
+function exifJpeg(width, height, capturedAt = '2026:09:16 20:10:22') {
+  const tiff = new Uint8Array(64);
+  const view = new DataView(tiff.buffer);
+  tiff[0] = 0x49;
+  tiff[1] = 0x49;
+  view.setUint16(2, 42, true);
+  view.setUint32(4, 8, true);
+  view.setUint16(8, 1, true);
+  view.setUint16(10, 0x8769, true);
+  view.setUint16(12, 4, true);
+  view.setUint32(14, 1, true);
+  view.setUint32(18, 26, true);
+  view.setUint32(22, 0, true);
+  view.setUint16(26, 1, true);
+  view.setUint16(28, 0x9003, true);
+  view.setUint16(30, 2, true);
+  view.setUint32(32, 20, true);
+  view.setUint32(36, 44, true);
+  view.setUint32(40, 0, true);
+  [...capturedAt, '\0'].forEach((character, index) => { tiff[44 + index] = character.charCodeAt(0); });
+
+  const exif = new Uint8Array(6 + tiff.length);
+  exif.set([0x45, 0x78, 0x69, 0x66, 0x00, 0x00], 0);
+  exif.set(tiff, 6);
+  const length = exif.length + 2;
+  const sof = Uint8Array.from([
+    0xff, 0xc0, 0x00, 0x11, 0x08,
+    height >> 8, height & 0xff, width >> 8, width & 0xff,
+    0x03, 0x01, 0x11, 0x00, 0x02, 0x11, 0x00, 0x03, 0x11, 0x00,
+    0xff, 0xd9,
+  ]);
+  return new Blob([
+    Uint8Array.from([0xff, 0xd8, 0xff, 0xe1, length >> 8, length & 0xff]),
+    exif,
+    sof,
+  ], { type: 'image/jpeg' });
+}
+
 function png(width, height, name = 'moon.png') {
   const bytes = new Uint8Array(24);
   const view = new DataView(bytes.buffer);
@@ -140,6 +178,18 @@ function loadPipeline(overrides = {}) {
 test('exposes the reusable compress API', () => {
   const browser = loadPipeline();
   assert.equal(typeof browser.pipeline?.compress, 'function');
+});
+
+test('reports the bounded JPEG EXIF capture time before metadata is stripped', async () => {
+  let metadataValue;
+  const browser = loadPipeline({
+    createImageBitmap: async (_file, options) => ({ width: options.resizeWidth, height: options.resizeHeight, close() {} }),
+  });
+  await browser.pipeline.compress(exifJpeg(1200, 800), {
+    onMetadata(metadata) { metadataValue = metadata; },
+  });
+  assert.equal(metadataValue?.format, 'jpeg');
+  assert.equal(metadataValue?.capturedAt, '2026-09-16T20:10');
 });
 
 test('small JPEG releases the bitmap before one quality-controlled JPEG encode', async () => {

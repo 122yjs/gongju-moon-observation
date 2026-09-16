@@ -361,6 +361,63 @@ test("offers external high-quality capture, in-page camera fallback, and gallery
   assert.doesNotMatch(html, /페이지 안 고화질 촬영/);
 });
 
+test("asks students to confirm observation time only when photo time differs by more than 30 minutes", async () => {
+  const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
+  const pipeline = await readFile(new URL("../public/photo-pipeline.js", import.meta.url), "utf8");
+  assert.match(html, /const PHOTO_TIME_REVIEW_THRESHOLD_MINUTES = 30/);
+  assert.match(html, /gapMinutes > PHOTO_TIME_REVIEW_THRESHOLD_MINUTES/);
+  assert.match(html, /달을 관찰한 시간을 확인해 주세요\./);
+  assert.match(html, /사진에 기록된 촬영 시각/);
+  assert.match(html, /사진 촬영 시각으로 바꾸기/);
+  assert.match(html, /직접 수정하기/);
+  assert.match(html, /입력한 시각이 맞아요/);
+  assert.match(html, /사진 촬영 시각과 입력한 관찰 시각이 30분 넘게 달라요/);
+  assert.match(html, /onMetadata\(metadata\)/);
+  assert.match(pipeline, /readExifCaptureTime/);
+  assert.match(pipeline, /capturedAt: info\.capturedAt \|\| null/);
+});
+
+test("treats an exact 30-minute photo-time gap as normal and 31 minutes as reviewable", async () => {
+  const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
+  const script = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
+  assert.ok(script, "student page script should exist");
+
+  const elements = new Map();
+  const getElement = (id) => {
+    if (!elements.has(id)) elements.set(id, createElement());
+    return elements.get(id);
+  };
+  getElement("observedAt").value = "2026-09-16T20:30";
+  getElement("observationTimeReview").classList.add("hidden");
+  const context = {
+    document: {
+      addEventListener() {},
+      getElementById: getElement,
+    },
+  };
+  runInNewContext(
+    `${script}
+globalThis.__timeReview = {
+  setCapturedAt(value) { attachedPhotoCapturedAt = value; observationTimeAcknowledgedKey = ''; },
+  state: observationTimeReviewState,
+  render: renderObservationTimeReview,
+};`,
+    context,
+  );
+
+  context.__timeReview.setCapturedAt("2026-09-16T20:00");
+  assert.equal(context.__timeReview.state().gapMinutes, 30);
+  assert.equal(context.__timeReview.state().needsDecision, false);
+
+  context.__timeReview.setCapturedAt("2026-09-16T19:59");
+  assert.equal(context.__timeReview.state().gapMinutes, 31);
+  assert.equal(context.__timeReview.state().needsDecision, true);
+  context.__timeReview.render();
+  assert.equal(getElement("observationTimeReview").classList.contains("hidden"), false);
+  assert.equal(getElement("photoCapturedAtText").textContent, "9월 16일 오후 7:59");
+  assert.equal(getElement("studentObservedAtText").textContent, "9월 16일 오후 8:30");
+});
+
 test("places the lighter compass trigger before student details and photo help after camera fallback", async () => {
   const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
   const privacyNotice = html.indexOf('aria-label="사진 개인정보 보호 안내"');
