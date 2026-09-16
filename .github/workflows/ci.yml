@@ -1,0 +1,13 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  call-reusable:
+    uses: 122yjs/gha-reusable/.github/workflows/reusable-ci.yml@main
+    with:
+      # code-only Graphify (AST). 문서 Pass 아님.
+      run_graphify: true
