@@ -755,7 +755,11 @@ export async function seedImageTickets(
            file_id = excluded.file_id,
            image_type = excluded.image_type,
            status = excluded.status,
-           expires_at = excluded.expires_at`,
+           expires_at = excluded.expires_at
+         WHERE image_tickets.teacher_id != excluded.teacher_id
+            OR image_tickets.file_id != excluded.file_id
+            OR image_tickets.image_type != excluded.image_type
+            OR image_tickets.status != excluded.status`,
       ).bind(
         item.observationId,
         teacherId,

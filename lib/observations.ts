@@ -12,10 +12,17 @@ export interface ObservationInput {
   photo: File;
 }
 
-function normalizeText(value: FormDataEntryValue | null, maximum: number, label: string) {
+function normalizeText(
+  value: FormDataEntryValue | null,
+  maximum: number,
+  label: string,
+  options: { allowLineBreaks?: boolean } = {},
+) {
   if (typeof value !== "string") throw new HttpError(400, `${label} 값이 없습니다.`);
-  const normalized = value.normalize("NFC").trim();
-  if (/\p{Cc}/u.test(normalized)) throw new HttpError(400, `${label}에 사용할 수 없는 문자가 있습니다.`);
+  const text = options.allowLineBreaks ? value.replace(/\r\n|[\r\u000b\u000c\u0085\u2028\u2029]/g, "\n") : value;
+  const normalized = text.normalize("NFC").trim();
+  const sanitized = options.allowLineBreaks ? normalized.replace(/[\n\t]/g, "") : normalized;
+  if (/\p{Cc}/u.test(sanitized)) throw new HttpError(400, `${label}에 사용할 수 없는 문자가 있습니다.`);
   if (Array.from(normalized).length > maximum) throw new HttpError(400, `${label}이 너무 깁니다.`);
   return normalized;
 }
@@ -44,7 +51,7 @@ export function validateObservationForm(form: FormData): ObservationInput {
     throw new HttpError(400, "관찰 시각은 최근 90일 이내의 날짜로 입력해 주세요.");
   }
 
-  const memo = normalizeText(form.get("memo") ?? "", 300, "관찰 기록");
+  const memo = normalizeText(form.get("memo") ?? "", 300, "관찰 기록", { allowLineBreaks: true });
   const photo = form.get("photo");
   if (!(photo instanceof File)) throw new HttpError(400, "달 사진을 선택해 주세요.");
   if (photo.size <= 0 || photo.size > 6 * 1024 * 1024) {
