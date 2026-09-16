@@ -9,12 +9,51 @@ interface Observation {
   studentNumber: number;
   studentName: string;
   observedAt: string;
+  originalObservedAt: string;
+  correctedObservedAt: string | null;
+  correctedAt: string | null;
   memo: string;
   imageBytes: number;
   status: "visible" | "hidden";
   createdAt: string;
   imageUrl: string;
   driveUrl: string;
+}
+
+function formatObservedAt(value: string) {
+  return value ? value.replace("T", " ") : "-";
+}
+
+function formatSubmittedAt(value: string) {
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) return value ? value.replace("T", " ").replace(/Z$/, "") : "-";
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(parsed);
+}
+
+function timeGapSummary(item: Observation) {
+  const studentValue = item.originalObservedAt || item.observedAt;
+  const student = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(studentValue)
+    ? new Date(`${studentValue}:00+09:00`)
+    : null;
+  const submitted = new Date(item.createdAt);
+  if (!student || !Number.isFinite(student.getTime()) || !Number.isFinite(submitted.getTime())) return null;
+  const minutes = Math.round((submitted.getTime() - student.getTime()) / 60000);
+  const absolute = Math.abs(minutes);
+  const duration = absolute >= 60
+    ? `${Math.floor(absolute / 60)}시간${absolute % 60 ? ` ${absolute % 60}분` : ""}`
+    : `${absolute}분`;
+  if (minutes < 0) {
+    return { text: `학생 설정 시각이 실제 제출보다 ${duration} 뒤입니다.`, needsReview: absolute >= 5 };
+  }
+  return { text: `학생 설정 시각 기준 ${duration} 뒤에 제출했습니다.`, needsReview: minutes >= 120 };
 }
 
 interface ClassInfo {
@@ -181,6 +220,10 @@ export default function AdminPage() {
   const [observationLon, setObservationLon] = useState("127.5");
   const [geocodeItems, setGeocodeItems] = useState<GeocodeCandidate[]>([]);
   const [regionSearchStatus, setRegionSearchStatus] = useState("");
+  const [editingObservationId, setEditingObservationId] = useState<string | null>(null);
+  const [editObservedAt, setEditObservedAt] = useState("");
+  const [editReason, setEditReason] = useState("");
+  const [savingObservationId, setSavingObservationId] = useState<string | null>(null);
 
   const applyGeocodeCandidate = useCallback((candidate: GeocodeCandidate) => {
     setRegionLabel(candidate.label);
@@ -449,6 +492,46 @@ export default function AdminPage() {
     const result = (await response.json().catch(() => ({}))) as { message?: string };
     if (!response.ok) return setMessage(result.message || "공개 상태를 바꾸지 못했습니다.");
     setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, status } : entry)));
+  }
+
+  function beginObservedAtCorrection(item: Observation) {
+    setEditingObservationId(item.id);
+    setEditObservedAt(item.observedAt);
+    setEditReason("");
+  }
+
+  async function saveObservedAtCorrection(event: FormEvent<HTMLFormElement>, item: Observation) {
+    event.preventDefault();
+    if (editReason.trim().length < 2) return setMessage("정정 사유를 2자 이상 입력해 주세요.");
+    setSavingObservationId(item.id);
+    try {
+      const response = await fetch(`/api/admin/observations/${item.id}`, {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ observedAt: editObservedAt, reason: editReason }),
+      });
+      const result = (await response.json().catch(() => ({}))) as {
+        observedAt?: string;
+        originalObservedAt?: string;
+        correctedAt?: string;
+        message?: string;
+      };
+      if (!response.ok) return setMessage(result.message || "관찰 시각을 정정하지 못했습니다.");
+      setItems((current) => current.map((entry) => entry.id === item.id ? {
+        ...entry,
+        observedAt: result.observedAt || editObservedAt,
+        originalObservedAt: result.originalObservedAt || entry.originalObservedAt,
+        correctedObservedAt: result.observedAt || editObservedAt,
+        correctedAt: result.correctedAt || new Date().toISOString(),
+      } : entry));
+      setEditingObservationId(null);
+      setEditObservedAt("");
+      setEditReason("");
+      setMessage(`${item.studentNumber}번 학생의 관찰 시각을 정정했습니다. 최초 학생 입력값과 정정 이력은 Google Sheets에 보존됩니다.`);
+    } finally {
+      setSavingObservationId(null);
+    }
   }
 
   async function remove(item: Observation) {
@@ -740,8 +823,33 @@ export default function AdminPage() {
                 <img src={item.imageUrl} alt={`${item.studentNumber}번 ${item.studentName} 달 관찰 사진`} className="h-56 w-full bg-space-900 object-cover" />
                 <div className="p-4">
                   <div className="flex items-center justify-between gap-2"><h3 className="font-black">{item.studentNumber}번 {item.studentName}</h3><span className="text-xs text-slate-500">{Math.ceil(item.imageBytes / 1024)}KB</span></div>
-                  <p className="mt-2 text-xs text-slate-400">{item.observedAt.replace("T", " ")}</p>
+                  <div className="mt-3 space-y-1 rounded-xl border border-space-700 bg-space-900/70 p-3 text-xs leading-5">
+                    <p className="text-slate-300"><span className="font-bold text-slate-400">학생 설정</span> · {formatObservedAt(item.originalObservedAt || item.observedAt)}</p>
+                    {item.correctedObservedAt ? <p className="text-emerald-200"><span className="font-bold">교사 정정</span> · {formatObservedAt(item.correctedObservedAt)}</p> : null}
+                    <p className="text-slate-300"><span className="font-bold text-slate-400">실제 제출</span> · {formatSubmittedAt(item.createdAt)}</p>
+                    {(() => {
+                      const gap = timeGapSummary(item);
+                      return gap ? <p className={gap.needsReview ? "font-bold text-amber-300" : "text-slate-500"}>{gap.needsReview ? "확인 필요 · " : ""}{gap.text}</p> : null;
+                    })()}
+                  </div>
                   {item.memo ? <p className="mt-3 rounded-xl bg-space-900 p-3 text-sm leading-6 text-slate-300">{item.memo}</p> : null}
+                  {editingObservationId === item.id ? (
+                    <form onSubmit={(event) => void saveObservedAtCorrection(event, item)} className="mt-3 space-y-3 rounded-xl border border-amber-400/25 bg-amber-400/5 p-3">
+                      <label className="block text-xs font-bold text-amber-100">정정할 관찰 시각
+                        <input type="datetime-local" required value={editObservedAt} onChange={(event) => setEditObservedAt(event.target.value)} className="mt-2 w-full rounded-lg border border-space-600 bg-space-950 px-3 py-2 text-sm text-slate-100" />
+                      </label>
+                      <label className="block text-xs font-bold text-amber-100">정정 사유
+                        <input required minLength={2} maxLength={120} value={editReason} onChange={(event) => setEditReason(event.target.value)} placeholder="예: 학생 확인 후 실제 관찰 시각으로 정정" className="mt-2 w-full rounded-lg border border-space-600 bg-space-950 px-3 py-2 text-sm text-slate-100" />
+                      </label>
+                      <p className="text-[11px] leading-4 text-slate-400">학생이 처음 입력한 시각은 덮어쓰지 않고 Google Sheets에 그대로 남깁니다.</p>
+                      <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+                        <button type="submit" disabled={savingObservationId === item.id} className="rounded-lg bg-amber-400 px-3 py-2 text-space-950 disabled:opacity-50">정정 저장</button>
+                        <button type="button" onClick={() => setEditingObservationId(null)} className="rounded-lg border border-space-600 px-3 py-2 text-slate-300">취소</button>
+                      </div>
+                    </form>
+                  ) : (
+                    <button onClick={() => beginObservedAtCorrection(item)} className="mt-3 w-full rounded-lg border border-amber-400/25 bg-amber-400/5 px-3 py-2 text-xs font-bold text-amber-200">관찰 시각 정정</button>
+                  )}
                   <div className="mt-4 grid grid-cols-3 gap-2 text-xs font-bold">
                     <button onClick={() => void updateStatus(item)} className="rounded-lg border border-space-600 px-2 py-2">{item.status === "visible" ? "숨기기" : "공개"}</button>
                     <a href={item.driveUrl || invite?.rootFolderUrl || "#"} target="_blank" rel="noreferrer" className="rounded-lg border border-space-600 px-2 py-2 text-center">Drive</a>

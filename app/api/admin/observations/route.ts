@@ -1,5 +1,5 @@
 import { getTeacherSession } from "../../../../lib/auth";
-import { getTeacherAccessToken, listObservationRows } from "../../../../lib/google-drive";
+import { ensureTeacherSummarySheet, getTeacherAccessToken, listObservationRows } from "../../../../lib/google-drive";
 import { errorResponse, HttpError, json } from "../../../../lib/http";
 import { decodeCursor, encodeCursor } from "../../../../lib/observations";
 import { getTeacherById, seedImageTickets } from "../../../../lib/tenant";
@@ -15,6 +15,9 @@ export async function GET(request: Request) {
     const cursor = decodeCursor(cursorValue);
     if (cursorValue && !cursor) throw new HttpError(400, "이어보기 정보가 올바르지 않습니다.");
     const accessToken = await getTeacherAccessToken(teacher);
+    await ensureTeacherSummarySheet(accessToken, teacher).catch((error) => {
+      console.warn("기존 Google Sheets 시간 열을 최신 형식으로 맞추지 못했습니다.", error);
+    });
     const page = await listObservationRows(accessToken, teacher, {
       limit: 30,
       cursor,
@@ -35,6 +38,9 @@ export async function GET(request: Request) {
         studentNumber: item.studentNumber,
         studentName: item.studentName,
         observedAt: item.observedAt,
+        originalObservedAt: item.originalObservedAt || item.observedAt,
+        correctedObservedAt: item.correctedObservedAt || null,
+        correctedAt: item.correctedAt || null,
         memo: item.memo,
         imageBytes: item.imageBytes,
         status: item.status,

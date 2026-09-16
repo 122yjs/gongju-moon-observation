@@ -59,6 +59,11 @@ interface SpreadsheetMetadata {
       title?: string;
       index?: number;
       hidden?: boolean;
+      gridProperties?: {
+        rowCount?: number;
+        columnCount?: number;
+        frozenRowCount?: number;
+      };
     };
     protectedRanges?: Array<{
       protectedRangeId?: number;
@@ -99,7 +104,13 @@ export interface DriveObservation {
   classLabel: string;
   studentNumber: number;
   studentName: string;
+  /** Current effective observation time. Uses the teacher correction when present. */
   observedAt: string;
+  /** Time originally entered by the student. This is never overwritten by a teacher correction. */
+  originalObservedAt?: string;
+  correctedObservedAt?: string;
+  correctedAt?: string;
+  correctionHistory?: string;
   memo: string;
   imageFileId: string;
   imageType: string;
@@ -348,16 +359,58 @@ async function renameAndFormatSheet(
 function summaryFormula(rawSheetTitle: string) {
   const raw = quoteSheetTitle(rawSheetTitle);
   const endRow = MAX_SHEET_ROWS + 1;
-  return `=ARRAYFORMULA(IFERROR(SORT(FILTER({${raw}!E2:E${endRow},${raw}!D2:D${endRow},SUBSTITUTE(${raw}!F2:F${endRow},"T"," "),${raw}!G2:G${endRow},IF(${raw}!J2:J${endRow}="","",ROUND(${raw}!J2:J${endRow}/1048576,2)&" MB"),IF(${raw}!M2:M${endRow}="","",HYPERLINK(${raw}!M2:M${endRow},"사진 열기"))},${raw}!A2:A${endRow}<>"",${raw}!K2:K${endRow}="visible"),3,FALSE),""))`;
+  const submittedAtKst = `IF(${raw}!L2:L${endRow}="","",TEXT(DATEVALUE(LEFT(${raw}!L2:L${endRow},10))+TIMEVALUE(MID(${raw}!L2:L${endRow},12,8))+TIME(9,0,0),"yyyy-mm-dd hh:mm"))`;
+  return `=ARRAYFORMULA(IFERROR(SORT(FILTER({${raw}!E2:E${endRow},${raw}!D2:D${endRow},SUBSTITUTE(${raw}!F2:F${endRow},"T"," "),IF(${raw}!N2:N${endRow}="","",SUBSTITUTE(${raw}!N2:N${endRow},"T"," ")),${submittedAtKst},${raw}!G2:G${endRow},IF(${raw}!J2:J${endRow}="","",ROUND(${raw}!J2:J${endRow}/1048576,2)&" MB"),IF(${raw}!M2:M${endRow}="","",HYPERLINK(${raw}!M2:M${endRow},"사진 열기"))},${raw}!A2:A${endRow}<>"",${raw}!K2:K${endRow}="visible"),5,FALSE),""))`;
+}
+
+const OBSERVATION_HEADERS = [
+  "관찰 ID",
+  "요청 ID",
+  "학급",
+  "번호",
+  "이름",
+  "학생 설정 관찰 시각",
+  "관찰 기록",
+  "사진 파일 ID",
+  "사진 형식",
+  "사진 용량",
+  "공개 상태",
+  "실제 제출 시각 (UTC)",
+  "사진 링크",
+  "교사 정정 관찰 시각",
+  "최근 정정 시각 (UTC)",
+  "관찰 시각 정정 이력",
+];
+
+async function ensureObservationHeaders(
+  accessToken: string,
+  teacher: Pick<TeacherDriveResources, "spreadsheetId" | "sheetTitle">,
+) {
+  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A1:P1`;
+  const current = await googleJson<ValueRange>(
+    `${SHEETS_API}/spreadsheets/${encodeURIComponent(teacher.spreadsheetId)}/values/${encodeURIComponent(range)}?${new URLSearchParams({ majorDimension: "ROWS", valueRenderOption: "UNFORMATTED_VALUE" })}`,
+    accessToken,
+  );
+  const row = current.values?.[0] || [];
+  const alreadyCurrent = OBSERVATION_HEADERS.every((header, index) => cell(row, index) === header);
+  if (alreadyCurrent) return false;
+  await updateSheetValues(
+    accessToken,
+    teacher.spreadsheetId,
+    range,
+    [OBSERVATION_HEADERS],
+  );
+  return true;
 }
 
 export async function ensureTeacherSummarySheet(
   accessToken: string,
   teacher: Pick<TeacherDriveResources, "spreadsheetId" | "sheetId" | "sheetTitle">,
 ) {
+  const rawHeadersChanged = await ensureObservationHeaders(accessToken, teacher);
   const fields = [
     "properties(timeZone)",
-    "sheets(properties(sheetId,title,index,hidden),protectedRanges(protectedRangeId,description,warningOnly,range(sheetId)))",
+    "sheets(properties(sheetId,title,index,hidden,gridProperties(rowCount,columnCount,frozenRowCount)),protectedRanges(protectedRangeId,description,warningOnly,range(sheetId)))",
   ].join(",");
   const metadata = await googleJson<SpreadsheetMetadata>(
     `${SHEETS_API}/spreadsheets/${encodeURIComponent(teacher.spreadsheetId)}?${new URLSearchParams({ fields })}`,
@@ -390,24 +443,32 @@ export async function ensureTeacherSummarySheet(
           index: 0,
           gridProperties: {
             rowCount: MAX_SHEET_ROWS + 1,
-            columnCount: 6,
+            columnCount: 8,
             frozenRowCount: 1,
           },
         },
       },
     });
   } else {
-    setupRequests.push({
-      updateSheetProperties: {
-        properties: {
-          sheetId: summarySheet.properties.sheetId,
-          index: 0,
-          hidden: false,
-          gridProperties: { frozenRowCount: 1 },
+    const grid = summarySheet.properties.gridProperties;
+    if (
+      summarySheet.properties.index !== 0 ||
+      summarySheet.properties.hidden === true ||
+      grid?.frozenRowCount !== 1 ||
+      (grid?.columnCount || 0) < 8
+    ) {
+      setupRequests.push({
+        updateSheetProperties: {
+          properties: {
+            sheetId: summarySheet.properties.sheetId,
+            index: 0,
+            hidden: false,
+            gridProperties: { frozenRowCount: 1, columnCount: Math.max(8, grid?.columnCount || 0) },
+          },
+          fields: "index,hidden,gridProperties.frozenRowCount,gridProperties.columnCount",
         },
-        fields: "index,hidden,gridProperties.frozenRowCount",
-      },
-    });
+      });
+    }
   }
   if (!rawSheet.properties.hidden) {
     setupRequests.push({
@@ -439,19 +500,47 @@ export async function ensureTeacherSummarySheet(
     throw new HttpError(502, "Google Sheets 제출 목록 탭을 준비하지 못했습니다.");
   }
   const summaryTitle = quoteSheetTitle(SUMMARY_SHEET_TITLE);
-  await updateSheetValues(
-    accessToken,
-    teacher.spreadsheetId,
-    `${summaryTitle}!A1:F1`,
-    [["이름", "출석번호", "관찰 시각 (한국 시간)", "설명", "사진 용량", "사진 원본 링크"]],
-  );
-  await updateSheetValues(
-    accessToken,
-    teacher.spreadsheetId,
-    `${summaryTitle}!A2`,
-    [[summaryFormula(rawSheet.properties.title)]],
-    "USER_ENTERED",
-  );
+  const summaryHeaders = [
+    "이름",
+    "출석번호",
+    "학생 설정 관찰 시각 (한국 시간)",
+    "교사 정정 관찰 시각 (한국 시간)",
+    "실제 제출 시각 (한국 시간)",
+    "설명",
+    "사진 용량",
+    "사진 원본 링크",
+  ];
+  const formula = summaryFormula(rawSheet.properties.title);
+  const [currentSummaryHeaders, currentFormula] = await Promise.all([
+    googleJson<ValueRange>(
+      `${SHEETS_API}/spreadsheets/${encodeURIComponent(teacher.spreadsheetId)}/values/${encodeURIComponent(`${summaryTitle}!A1:H1`)}?${new URLSearchParams({ majorDimension: "ROWS", valueRenderOption: "UNFORMATTED_VALUE" })}`,
+      accessToken,
+    ),
+    googleJson<ValueRange>(
+      `${SHEETS_API}/spreadsheets/${encodeURIComponent(teacher.spreadsheetId)}/values/${encodeURIComponent(`${summaryTitle}!A2`)}?${new URLSearchParams({ majorDimension: "ROWS", valueRenderOption: "FORMULA" })}`,
+      accessToken,
+    ),
+  ]);
+  const summaryHeaderRow = currentSummaryHeaders.values?.[0] || [];
+  const summaryHeadersChanged = !summaryHeaders.every((header, index) => cell(summaryHeaderRow, index) === header);
+  const formulaChanged = cell(currentFormula.values?.[0] || [], 0) !== formula;
+  if (summaryHeadersChanged) {
+    await updateSheetValues(
+      accessToken,
+      teacher.spreadsheetId,
+      `${summaryTitle}!A1:H1`,
+      [summaryHeaders],
+    );
+  }
+  if (formulaChanged) {
+    await updateSheetValues(
+      accessToken,
+      teacher.spreadsheetId,
+      `${summaryTitle}!A2`,
+      [[formula]],
+      "USER_ENTERED",
+    );
+  }
 
   const protectedRange = summarySheet?.protectedRanges?.find(
     (item) => item.description === SUMMARY_PROTECTION_DESCRIPTION,
@@ -475,7 +564,7 @@ export async function ensureTeacherSummarySheet(
         fields: "userEnteredFormat(backgroundColor,horizontalAlignment,textFormat.bold)",
       },
     },
-    ...[120, 90, 170, 320, 110, 120].map((pixelSize, index) => ({
+    ...[120, 90, 185, 185, 185, 320, 110, 120].map((pixelSize, index) => ({
       updateDimensionProperties: {
         range: {
           sheetId: summarySheetId,
@@ -501,7 +590,9 @@ export async function ensureTeacherSummarySheet(
   } else {
     formatRequests.push({ addProtectedRange: { protectedRange: protectedRangeSettings } });
   }
-  await batchUpdateSpreadsheet(accessToken, teacher.spreadsheetId, formatRequests);
+  if (rawHeadersChanged || setupRequests.length > 0 || summaryHeadersChanged || formulaChanged || !protectedRange) {
+    await batchUpdateSpreadsheet(accessToken, teacher.spreadsheetId, formatRequests);
+  }
   return summarySheetId;
 }
 
@@ -534,26 +625,7 @@ export async function initializeTeacherDrive(
   const sheetId = Number(first?.sheetId);
   const sheetTitle = "관찰 기록";
   await renameAndFormatSheet(accessToken, spreadsheet.id, sheetId, sheetTitle);
-  await updateSheetValues(
-    accessToken,
-    spreadsheet.id,
-    `${quoteSheetTitle(sheetTitle)}!A1:M1`,
-    [[
-      "관찰 ID",
-      "요청 ID",
-      "학급",
-      "번호",
-      "이름",
-      "관찰 시각",
-      "관찰 기록",
-      "사진 파일 ID",
-      "사진 형식",
-      "사진 용량",
-      "공개 상태",
-      "제출 시각",
-      "사진 링크",
-    ]],
-  );
+  await ensureObservationHeaders(accessToken, { spreadsheetId: spreadsheet.id, sheetTitle });
 
   await ensureTeacherSummarySheet(accessToken, {
     spreadsheetId: spreadsheet.id,
@@ -637,7 +709,7 @@ export async function appendObservationRow(
   teacher: TeacherConnection,
   observation: Omit<DriveObservation, "rowNumber">,
 ) {
-  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A:M`;
+  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A:P`;
   const query = new URLSearchParams({
     valueInputOption: "RAW",
     insertDataOption: "INSERT_ROWS",
@@ -664,6 +736,9 @@ export async function appendObservationRow(
           observation.status,
           observation.createdAt,
           observation.imageWebViewUrl,
+          "",
+          "",
+          "",
         ]],
       }),
     },
@@ -681,6 +756,8 @@ function parseObservation(row: unknown[], rowNumber: number): DriveObservation |
   const studentNumber = Number(cell(row, 3));
   const imageBytes = Number(cell(row, 9));
   const statusText = cell(row, 10);
+  const originalObservedAt = cell(row, 5);
+  const correctedObservedAt = cell(row, 13);
   if (!/^[0-9a-f-]{36}$/i.test(id) || !Number.isInteger(studentNumber)) return null;
   return {
     id,
@@ -688,7 +765,11 @@ function parseObservation(row: unknown[], rowNumber: number): DriveObservation |
     classLabel: cell(row, 2),
     studentNumber,
     studentName: cell(row, 4),
-    observedAt: cell(row, 5),
+    observedAt: correctedObservedAt || originalObservedAt,
+    originalObservedAt,
+    correctedObservedAt: correctedObservedAt || undefined,
+    correctedAt: cell(row, 14) || undefined,
+    correctionHistory: cell(row, 15) || undefined,
     memo: cell(row, 6),
     imageFileId: cell(row, 7),
     imageType: cell(row, 8) || "image/jpeg",
@@ -701,7 +782,7 @@ function parseObservation(row: unknown[], rowNumber: number): DriveObservation |
 }
 
 async function readObservationRows(accessToken: string, teacher: TeacherConnection) {
-  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A2:M${MAX_SHEET_ROWS + 1}`;
+  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A2:P${MAX_SHEET_ROWS + 1}`;
   const query = new URLSearchParams({ majorDimension: "ROWS", valueRenderOption: "UNFORMATTED_VALUE" });
   const response = await googleJson<ValueRange>(
     `${SHEETS_API}/spreadsheets/${encodeURIComponent(teacher.spreadsheetId)}/values/${encodeURIComponent(range)}?${query}`,
@@ -771,6 +852,29 @@ export async function updateObservationStatus(
     `${quoteSheetTitle(teacher.sheetTitle)}!K${observation.rowNumber}`,
     [[status]],
   );
+}
+
+export async function updateObservationObservedAt(
+  accessToken: string,
+  teacher: TeacherConnection,
+  observation: DriveObservation,
+  observedAt: string,
+  reason: string,
+) {
+  const correctedAt = new Date().toISOString();
+  const previous = observation.observedAt;
+  const cleanReason = reason.replace(/[\r\n\t]+/g, " ").trim();
+  const historyLine = `${correctedAt} | ${previous} → ${observedAt} | ${cleanReason}`;
+  const correctionHistory = observation.correctionHistory
+    ? `${observation.correctionHistory}\n${historyLine}`
+    : historyLine;
+  await updateSheetValues(
+    accessToken,
+    teacher.spreadsheetId,
+    `${quoteSheetTitle(teacher.sheetTitle)}!N${observation.rowNumber}:P${observation.rowNumber}`,
+    [[observedAt, correctedAt, correctionHistory]],
+  );
+  return { observedAt, correctedAt, correctionHistory };
 }
 
 export async function deleteObservation(

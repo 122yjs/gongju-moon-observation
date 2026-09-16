@@ -3,6 +3,7 @@ import {
   deleteObservation,
   findObservationRow,
   getTeacherAccessToken,
+  updateObservationObservedAt,
   updateObservationStatus,
 } from "../../../../../lib/google-drive";
 import { assertSameOrigin, errorResponse, HttpError, json } from "../../../../../lib/http";
@@ -31,21 +32,53 @@ export async function PATCH(
   try {
     assertSameOrigin(request);
     const { id } = await routeContext.params;
-    const payload = (await request.json()) as { status?: unknown };
-    if (payload.status !== "visible" && payload.status !== "hidden") {
-      throw new HttpError(400, "공개 상태 값이 올바르지 않습니다.");
-    }
+    const payload = (await request.json()) as { status?: unknown; observedAt?: unknown; reason?: unknown };
     const { teacher, accessToken, observation } = await contextFor(request, id);
-    await updateObservationStatus(accessToken, teacher, observation, payload.status);
-    await seedImageTickets(teacher.id, [
-      {
-        observationId: observation.id,
-        fileId: observation.imageFileId,
-        imageType: observation.imageType,
-        status: payload.status,
-      },
-    ]);
-    return json({ ok: true, status: payload.status });
+
+    if (payload.status === "visible" || payload.status === "hidden") {
+      await updateObservationStatus(accessToken, teacher, observation, payload.status);
+      await seedImageTickets(teacher.id, [
+        {
+          observationId: observation.id,
+          fileId: observation.imageFileId,
+          imageType: observation.imageType,
+          status: payload.status,
+        },
+      ]);
+      return json({ ok: true, status: payload.status });
+    }
+
+    if (typeof payload.observedAt === "string") {
+      const observedAt = payload.observedAt.trim();
+      const reason = typeof payload.reason === "string" ? payload.reason.normalize("NFC").trim() : "";
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(observedAt)) {
+        throw new HttpError(400, "정정할 관찰 시각을 확인해 주세요.");
+      }
+      const parsed = new Date(`${observedAt}:00+09:00`);
+      if (!Number.isFinite(parsed.getTime())) throw new HttpError(400, "정정할 관찰 시각을 확인해 주세요.");
+      const normalized = new Intl.DateTimeFormat("sv-SE", {
+        timeZone: "Asia/Seoul",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).format(parsed).replace(" ", "T");
+      if (normalized !== observedAt) throw new HttpError(400, "존재하지 않는 날짜나 시각입니다.");
+      if (reason.length < 2 || Array.from(reason).length > 120 || /\p{Cc}/u.test(reason)) {
+        throw new HttpError(400, "정정 사유를 2~120자로 입력해 주세요.");
+      }
+      const updated = await updateObservationObservedAt(accessToken, teacher, observation, observedAt, reason);
+      return json({
+        ok: true,
+        observedAt: updated.observedAt,
+        originalObservedAt: observation.originalObservedAt || observation.observedAt,
+        correctedAt: updated.correctedAt,
+      });
+    }
+
+    throw new HttpError(400, "수정할 값을 확인해 주세요.");
   } catch (error) {
     return errorResponse(error);
   }
