@@ -1,0 +1,19 @@
+{
+  "worktree": {
+    "setup": "npm run install:ci || npm ci || npm install\nif [ -f \"$PASEO_SOURCE_CHECKOUT_PATH/.env\" ]; then cp \"$PASEO_SOURCE_CHECKOUT_PATH/.env\" .env; elif [ -f .env.example ]; then cp .env.example .env; fi",
+    "teardown": "rm -rf .next .cache || true"
+  },
+  "scripts": {
+    "test": {
+      "command": "npm test"
+    },
+    "lint": {
+      "command": "npm run lint"
+    },
+    "dev": {
+      "type": "service",
+      "command": "npm run dev -- -p $PASEO_PORT",
+      "port": 3000
+    }
+  }
+}
