@@ -119,3 +119,5 @@ OAuth 클라이언트 보안 비밀번호는 `SESSION_SECRET`에서 파생한 �
 4. `CLOUDFLARE_API_TOKEN` 시크릿에 토큰 값 저장
 
 이후 `main`에 푸시하면 빌드 후 Worker가 자동으로 갱신됩니다. 앱 시크릿(`SESSION_SECRET` 등)은 Cloudflare Worker에 이미 있으면 유지됩니다.
+
+<!-- verify-reusable-ci-access: gha-reusable access_level=user -->
