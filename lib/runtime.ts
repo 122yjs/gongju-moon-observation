@@ -3,6 +3,15 @@ import { env } from "cloudflare:workers";
 export interface AppEnv {
   DB: D1Database;
   BUCKET?: R2Bucket;
+  IMAGES?: {
+    input(stream: ReadableStream): {
+      transform(options: Record<string, unknown>): {
+        output(options: { format: string; quality?: number; anim?: boolean }): Promise<{
+          response(options?: { headers?: HeadersInit }): Response;
+        }>;
+      };
+    };
+  };
   SESSION_SECRET: string;
   ADMIN_PASSWORD_HASH: string;
   CLASS_ID?: string;
