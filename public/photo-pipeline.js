@@ -21,7 +21,11 @@
     'source-limit': 'The source image exceeds the safe size limit.',
     'file-read-failed': 'The browser could not read the selected photo.',
     'file-read-timeout': 'The browser did not finish reading the selected photo.',
-    'heic-format': 'HEIC/HEIF photos must be exported as JPEG first.',
+    'heic-convert-unavailable': 'The HEIC conversion service is unavailable.',
+    'heic-convert-failed': 'The HEIC photo could not be converted.',
+    'heic-convert-timeout': 'The HEIC conversion request timed out.',
+    'heic-session-expired': 'A class session is required to convert HEIC photos.',
+    'heic-output-invalid': 'The HEIC conversion service returned an invalid image.',
     'invalid-image': 'The selected file is not a supported image.',
     'non-jpeg-limit': 'High-resolution images must be JPEG files.',
     'metadata-mismatch': 'The supplied image metadata does not match the file.',
@@ -77,11 +81,15 @@
     if (options.workerUrl !== undefined && (typeof options.workerUrl !== 'string' || !options.workerUrl)) {
       throw problem('invalid-options');
     }
+    if (options.heicUrl !== undefined && (typeof options.heicUrl !== 'string' || !options.heicUrl)) {
+      throw problem('invalid-options');
+    }
     return {
       maxSide,
       maxOutputBytes,
       quality,
       workerUrl: options.workerUrl || '/photo-worker.js',
+      heicUrl: options.heicUrl || '/api/photos/heic',
       onProgress: options.onProgress,
       onMetadata: options.onMetadata,
     };
@@ -262,9 +270,9 @@
     // Identify the container, not the extension or picker-supplied MIME type.
     if (view.byteLength >= 16 && view.getUint32(4) === 0x66747970) {
       const end = Math.min(view.byteLength, view.getUint32(0), 256);
-      const heifBrands = new Set([0x68656963, 0x68656978, 0x68657663, 0x68657678, 0x6865696d, 0x68656973, 0x6d696631, 0x6d736631]);
+      const heifBrands = new Set([0x68656963, 0x68656978, 0x68657663, 0x68657678, 0x6865696d, 0x68656973]);
       for (let offset = 8; offset + 4 <= end; offset += 4) {
-        if (offset !== 12 && heifBrands.has(view.getUint32(offset))) throw problem('heic-format');
+        if (offset !== 12 && heifBrands.has(view.getUint32(offset))) return { format: 'heic' };
       }
     }
     const info = readJpeg(view) || readPng(view) || readWebp(view);
@@ -272,6 +280,47 @@
       throw problem('invalid-image');
     }
     return info;
+  }
+
+  function validCapturedAt(value) {
+    return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) ? value : '';
+  }
+
+  async function convertHeic(file, settings) {
+    if (typeof fetch !== 'function') throw problem('heic-convert-unavailable');
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    let timer;
+    try {
+      if (controller) timer = setTimeout(() => controller.abort(), WORKER_TIMEOUT_MS);
+      progress(settings, 'converting');
+      const response = await fetch(settings.heicUrl, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: file,
+        ...(controller ? { signal: controller.signal } : {}),
+      });
+      if (!response || !response.ok) {
+        if (response && response.status === 401) throw problem('heic-session-expired');
+        if (response && response.status === 413) throw problem('source-limit');
+        throw problem('heic-convert-failed');
+      }
+      const contentType = String(response.headers?.get?.('Content-Type') || '').toLowerCase();
+      if (!contentType.startsWith('image/jpeg') || typeof response.blob !== 'function') throw problem('heic-output-invalid');
+      const blob = await response.blob();
+      if (!(blob instanceof Blob) || blob.type !== 'image/jpeg' || blob.size < 1) throw problem('heic-output-invalid');
+      if (blob.size > settings.maxOutputBytes) throw problem('output-limit');
+      return {
+        blob,
+        capturedAt: validCapturedAt(response.headers?.get?.('X-Photo-Captured-At') || ''),
+      };
+    } catch (error) {
+      if (controller && controller.signal.aborted) throw problem('heic-convert-timeout');
+      if (error && error.code) throw error;
+      throw problem('heic-convert-failed');
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   function readBytes(file, maximum) {
@@ -507,6 +556,20 @@
     try {
       progress(settings, 'reading');
       const info = await inspect(file);
+      if (info.format === 'heic') {
+        record('convert-heic', 'start');
+        const converted = await convertHeic(file, settings);
+        try {
+          if (typeof settings.onMetadata === 'function') {
+            settings.onMetadata({ format: 'heic', capturedAt: converted.capturedAt || null });
+          }
+        } catch {
+          // Metadata hints are optional and must never break image preparation.
+        }
+        record('convert-heic', 'success');
+        record('compress', 'success');
+        return converted.blob;
+      }
       try {
         if (typeof settings.onMetadata === 'function') {
           settings.onMetadata({ format: info.format, capturedAt: info.capturedAt || null });

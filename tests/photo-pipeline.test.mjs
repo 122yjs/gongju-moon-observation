@@ -646,14 +646,59 @@ test('VP8 and VP8L WebP files are accepted without trusting their MIME type', as
   }
 });
 
-test('HEIC has a specific actionable code and never enters a native decoder', async () => {
+test('HEIC uses the authenticated server conversion path and preserves its capture-time hint', async () => {
   const bytes = new Uint8Array(24);
   const view = new DataView(bytes.buffer);
   view.setUint32(0, 24); view.setUint32(4, 0x66747970); view.setUint32(8, 0x68656963);
   let decoded = false;
-  const browser = loadPipeline({ createImageBitmap: async () => { decoded = true; } });
-  await assert.rejects(browser.pipeline.compress(new Blob([bytes])), (error) => error.code === 'heic-format');
+  const requests = [];
+  let metadataValue;
+  const browser = loadPipeline({
+    createImageBitmap: async () => { decoded = true; },
+    fetch: async (url, options) => {
+      requests.push({ url, options });
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get(name) {
+            if (name.toLowerCase() === 'content-type') return 'image/jpeg';
+            if (name.toLowerCase() === 'x-photo-captured-at') return '2026-09-16T20:10';
+            return null;
+          },
+        },
+        async blob() { return new Blob(['converted-jpeg'], { type: 'image/jpeg' }); },
+      };
+    },
+  });
+  const result = await browser.pipeline.compress(new Blob([bytes]), {
+    onMetadata(metadata) { metadataValue = metadata; },
+  });
+  assert.equal(result.type, 'image/jpeg');
+  assert.equal(metadataValue?.format, 'heic');
+  assert.equal(metadataValue?.capturedAt, '2026-09-16T20:10');
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, '/api/photos/heic');
+  assert.equal(requests[0].options.method, 'POST');
+  assert.equal(requests[0].options.credentials, 'same-origin');
   assert.equal(decoded, false);
+  assert.equal(browser.workers.length, 0);
+});
+
+test('HEIC conversion never accepts a non-JPEG response', async () => {
+  const bytes = new Uint8Array(24);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(0, 24); view.setUint32(4, 0x66747970); view.setUint32(8, 0x68656963);
+  const browser = loadPipeline({
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'text/html' },
+      async blob() { return new Blob(['login page'], { type: 'text/html' }); },
+    }),
+  });
+  await assert.rejects(browser.pipeline.compress(new Blob([bytes])), (error) => error.code === 'heic-output-invalid');
+  assert.equal(browser.canvases.length, 0);
   assert.equal(browser.workers.length, 0);
 });
 
