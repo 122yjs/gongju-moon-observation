@@ -61,7 +61,7 @@ test('an upload timeout unlocks the form, aborts the request, and keeps the same
   assert.match(p.element('submitStatus').textContent, /전송 결과를 확인하지 못했어요/);
   p.context.fetch = async (_url, options) => {
     attempts.push(options);
-    return { ok: true, status: 200, json: async () => ({ ok: true, id: 'saved-id' }) };
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, id: 'saved-id' }) };
   };
   await p.submit();
   assert.equal(attempts[0].body.get('requestId'), attempts[1].body.get('requestId'));
@@ -82,8 +82,8 @@ test('a response body that never finishes is covered by the same upload deadline
 });
 
 test('HTTP 200 HTML or an invalid receipt cannot clear a student submission', async () => {
-  for (const json of [async () => { throw Error('HTML, not JSON'); }, async () => ({}), async () => ({ ok: true }), async () => ({ ok: false, id: 'not-saved' })]) {
-    const p = page(async () => ({ ok: true, status: 200, json }));
+  for (const body of ['<html>login</html>', '{}', '{"ok":true}', '{"ok":false,"id":"not-saved"}']) {
+    const p = page(async () => ({ ok: true, status: 200, text: async () => body }));
     await p.submit();
     assert.equal(p.resetCount(), 0);
     assert.ok(p.context.api.state().compressedImageBlob);
@@ -97,7 +97,7 @@ test('network, pending-conflict, and quota failures retain the photo without aut
     const p = page(async () => {
       calls += 1;
       if (!status) throw new TypeError('network failed');
-      return { ok: false, status, json: async () => ({ message: `test-${status}` }) };
+      return { ok: false, status, text: async () => JSON.stringify({ message: `test-${status}` }) };
     });
     await p.submit();
     assert.equal(calls, 1);
@@ -115,7 +115,7 @@ test('a late success after the deadline cannot reset a new or retained form', as
   await new Promise(setImmediate);
   p.timeout();
   await pending;
-  finish({ ok: true, status: 201, json: async () => ({ ok: true, id: 'late' }) });
+  finish({ ok: true, status: 201, text: async () => JSON.stringify({ ok: true, id: 'late' }) });
   await new Promise(setImmediate);
   assert.equal(p.resetCount(), 0);
   assert.ok(p.context.api.state().compressedImageBlob);
@@ -128,7 +128,22 @@ test('double submission creates only one in-flight network request', async () =>
   const first = p.submit();
   await p.submit();
   assert.equal(calls, 1);
-  finish({ ok: true, status: 201, json: async () => ({ ok: true, id: 'saved' }) });
+  finish({ ok: true, status: 201, text: async () => JSON.stringify({ ok: true, id: 'saved' }) });
   await first;
   assert.equal(p.resetCount(), 1);
+});
+
+test('a non-JSON edge failure exposes HTTP status and Cloudflare request reference without clearing the photo', async () => {
+  const p = page(async () => ({
+    ok: false,
+    status: 502,
+    headers: { get: (name) => name.toLowerCase() === 'cf-ray' ? 'abc123-ICN' : null },
+    text: async () => '<html><title>Cloudflare error</title></html>',
+  }));
+  await p.submit();
+  assert.equal(p.resetCount(), 0);
+  assert.ok(p.context.api.state().compressedImageBlob);
+  assert.match(p.element('submitStatus').textContent, /HTTP 502/);
+  assert.match(p.element('submitStatus').textContent, /abc123-ICN/);
+  assert.match(p.element('submitStatus').textContent, /서버 연결 과정/);
 });

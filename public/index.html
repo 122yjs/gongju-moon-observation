@@ -2207,8 +2207,12 @@
           const response = await fetch('/api/observations', {
             method: 'POST', credentials: 'same-origin', body: formData, signal: controller.signal,
           });
-          const result = await response.json().catch(() => null);
-          return { response, result };
+          const responseText = await response.text().catch(() => '');
+          let result = null;
+          if (responseText) {
+            try { result = JSON.parse(responseText); } catch (_) { /* Cloudflare/edge error pages may be HTML. */ }
+          }
+          return { response, result, responseText };
         })()]);
       } catch (error) {
         if (controller.signal.aborted) throw new Error('전송 결과를 확인하지 못했어요. 사진과 입력 내용은 그대로 있어요. 우리반 달사진에서 제출 여부를 확인한 뒤, 없으면 같은 사진으로 다시 눌러 주세요.');
@@ -2249,12 +2253,20 @@
         formData.append('memo', document.getElementById('memo').value.trim());
         formData.append('photo', compressedImageBlob, 'moon.jpg');
 
-        const { response, result } = await postObservation(formData);
+        const { response, result, responseText } = await postObservation(formData);
         if (response.status === 401) {
           hasClassSession = false;
           void checkSession();
         }
-        if (!response.ok) throw new Error(result?.message || (response.status === 429 ? '현재 제출이 많거나 저장 한도에 도달했어요. 사진을 보관한 채 선생님께 알려 주세요.' : '사진을 제출하지 못했습니다. 사진과 입력 내용은 그대로 있어요.'));
+        if (!response.ok) {
+          if (result?.message) throw new Error(result.message);
+          if (response.status === 429) throw new Error('현재 제출이 많거나 저장 한도에 도달했어요. 사진을 보관한 채 선생님께 알려 주세요.');
+          const ray = response.headers && typeof response.headers.get === 'function' ? response.headers.get('cf-ray') : '';
+          const status = response.status ? `HTTP ${response.status}` : '응답 오류';
+          const reference = ray ? ` · 확인번호 ${ray}` : '';
+          const edgeHint = responseText && /cloudflare/i.test(responseText) ? ' 서버 연결 과정에서 오류가 발생했습니다.' : '';
+          throw new Error(`사진을 제출하지 못했습니다. 사진과 입력 내용은 그대로 있어요.${edgeHint} 오류 코드: ${status}${reference}`);
+        }
         // A proxy/login HTML page with HTTP 200 is not a submission receipt.
         if (result?.ok !== true || typeof result.id !== 'string' || !result.id) throw new Error('서버의 제출 확인을 받지 못했어요. 사진과 입력 내용은 그대로 있어요. 제출 여부를 확인한 뒤 다시 시도해 주세요.');
         showSubmitStatus(result.message || '사진을 제출했습니다.', false, true);
