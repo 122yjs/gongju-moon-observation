@@ -444,6 +444,11 @@ test("places the lighter compass trigger before student details and photo help a
   assert.ok(cameraFallback > -1 && cameraFallback < photoPlaceholder);
 });
 
+test("lets vinext pass valid multipart photo uploads through to the observation API", async () => {
+  const config = await readFile(new URL("../next.config.ts", import.meta.url), "utf8");
+  assert.match(config, /serverActions:\s*\{[\s\S]*bodySizeLimit:\s*["']8mb["']/);
+});
+
 test("allows larger compressed photos for high-quality camera uploads", async () => {
   const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
   const observations = await readFile(new URL("../lib/observations.ts", import.meta.url), "utf8");
