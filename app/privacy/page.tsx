@@ -13,14 +13,16 @@ export default function PrivacyPage() {
 
         <h2 className="mt-7 text-xl font-black">학생 자료 저장 위치</h2>
         <p className="mt-2 text-sm leading-7 text-slate-300">학생 사진·번호·이름·관찰 시각·메모는 제출 처리 중 서버 메모리를 통과한 뒤 교사 소유 Google Drive와 Google Sheets에 저장됩니다. 중앙 D1 또는 R2에는 해당 내용을 장기 저장하지 않습니다.</p>
+        <p className="mt-2 text-sm leading-7 text-slate-300">교사 피드백도 해당 관찰 기록의 Google Sheets에 저장하며 중앙 D1에 본문을 저장하지 않습니다. 공개된 기록의 피드백은 같은 학급 학생 모두가 볼 수 있으므로 개인 상담이나 민감한 내용을 적지 않아야 합니다.</p>
 
         <h2 className="mt-7 text-xl font-black">중앙 서비스에 보관하는 정보</h2>
         <p className="mt-2 text-sm leading-7 text-slate-300">사진 선택 중 페이지가 다시 열려도 작성 내용을 복원할 수 있도록 번호·이름·관찰 시각·메모를 사용 중인 브라우저 탭에 임시 저장합니다. 제출 성공 시 삭제하며, 24시간이 지난 내용은 다시 열 때 삭제합니다. 사진 파일은 이 임시 저장에 포함되지 않습니다.</p>
         <p className="mt-2 text-sm leading-7 text-slate-300">외부 카메라 사용 중 브라우저가 다시 열렸을 때 수업 참여 상태를 복원하도록 학생 개인정보가 포함되지 않은 서명된 학급 복원 토큰도 같은 탭에 저장합니다. 이 토큰은 6시간 뒤 만료되며 다른 탭이나 다른 브라우저와 공유되지 않습니다.</p>
         <p className="mt-2 text-sm leading-7 text-slate-300">교사 Google 계정 표시정보, 암호화된 OAuth 갱신 토큰, 앱이 만든 Drive 파일 ID, 학급명과 학생 초대 토큰을 보관합니다. 중복 제출 방지표는 최대 24시간, 속도 제한 기록은 최대 1시간, 이미지 전달용 파일 표는 최대 30분 동안만 유지됩니다.</p>
+        <p className="mt-2 text-sm leading-7 text-slate-300">하트 중복 방지를 위해 학급별 무작위 브라우저 식별자를 HttpOnly·Secure 쿠키에 최대 1년간 보관합니다. 중앙 D1에는 원래 쿠키 값 대신 학급별 해시와 학급·관찰 기록 ID, 반응 생성 시각을 저장하며 학생 이름·번호·IP·기기 지문을 연결하지 않습니다. 하트는 취소하거나 앱에서 기록·학급을 삭제하거나 Drive 연결을 해제할 때 삭제됩니다. 같은 브라우저를 공유하면 하나의 참여자로 취급되며, 쿠키 삭제·만료·시크릿 모드·다른 기기에서는 중복 참여를 막을 수 없습니다. 투표나 평가 용도가 아닙니다.</p>
 
         <h2 className="mt-7 text-xl font-black">연결 해제와 삭제</h2>
-        <p className="mt-2 text-sm leading-7 text-slate-300">교사는 관리 화면에서 언제든 연결을 해제할 수 있습니다. 이때 중앙 연결정보와 토큰은 삭제되고 Google 권한은 폐기됩니다. 교사 Drive의 수업 폴더와 학생 자료는 교사가 계속 소유하며 직접 보관하거나 삭제할 수 있습니다.</p>
+        <p className="mt-2 text-sm leading-7 text-slate-300">교사는 관리 화면에서 언제든 연결을 해제할 수 있습니다. 이때 중앙 연결정보와 토큰, 하트 기록은 삭제되고 Google 권한은 폐기됩니다. 교사 Drive의 수업 폴더와 학생 자료·피드백은 교사가 계속 소유하며 직접 보관하거나 삭제할 수 있습니다.</p>
 
         <h2 className="mt-7 text-xl font-black">보호 조치</h2>
         <p className="mt-2 text-sm leading-7 text-slate-300">OAuth 토큰과 클라이언트 보안 비밀번호는 서버에서 AES-GCM 방식으로 암호화합니다. 학생·교사 세션은 서명된 HttpOnly·Secure 쿠키를 사용합니다. 사진에서 확인 가능한 촬영 시각은 관찰 시각 확인을 위해 교사 소유 Google Sheets 제출 기록에 함께 저장할 수 있으며, GPS 등 위치정보를 포함한 나머지 사진 메타데이터는 제거한 뒤 사진을 전송합니다. 촬영 시각은 중앙 D1에는 저장하지 않습니다.</p>

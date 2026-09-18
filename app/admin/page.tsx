@@ -19,6 +19,9 @@ interface Observation {
   createdAt: string;
   imageUrl: string;
   driveUrl: string;
+  teacherFeedback: string;
+  heartCount: number;
+  hearted: boolean;
 }
 
 function formatObservedAt(value: string) {
@@ -217,6 +220,110 @@ function HelpTip({ label }: { label: string }) {
         {label}
       </span>
     </span>
+  );
+}
+
+const FEEDBACK_MAX_CHARS = 500;
+
+function clampFeedback(value: string) {
+  const characters = Array.from(value);
+  return characters.length > FEEDBACK_MAX_CHARS ? characters.slice(0, FEEDBACK_MAX_CHARS).join("") : value;
+}
+
+function TeacherFeedbackEditor({ item, onSaved }: { item: Observation; onSaved: (id: string, teacherFeedback: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const value = draft ?? item.teacherFeedback ?? "";
+  const characterCount = Array.from(value).length;
+
+  async function save() {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/admin/observations/${item.id}`, {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teacherFeedback: value }),
+      });
+      const result = (await response.json().catch(() => ({}))) as { ok?: unknown; teacherFeedback?: unknown; message?: string };
+      if (!response.ok) throw new Error(result.message || "피드백을 저장하지 못했습니다.");
+      if (result.ok !== true || typeof result.teacherFeedback !== "string") throw new Error("피드백 저장 확인을 받지 못했습니다. 다시 시도해 주세요.");
+      onSaved(item.id, result.teacherFeedback);
+      setDraft(null);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "피드백을 저장하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-xl border border-amber-400/25 bg-amber-400/5 p-3">
+      <label className="block text-xs font-bold text-amber-100">선생님 피드백
+        <textarea
+          value={value}
+          disabled={saving}
+          onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setDraft(clampFeedback(event.target.value))}
+          rows={3}
+          placeholder="학생에게 남길 피드백을 적어 주세요. 빈 값으로 저장하면 삭제됩니다."
+          className="mt-2 w-full rounded-lg border border-space-600 bg-space-950 px-3 py-2 text-sm text-slate-100"
+        />
+      </label>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold text-slate-400">{characterCount}/{FEEDBACK_MAX_CHARS}자</span>
+        <button type="button" onClick={() => void save()} disabled={saving} className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-bold text-space-950 disabled:opacity-50">{saving ? "저장 중…" : "피드백 저장"}</button>
+      </div>
+      {error ? <p role="alert" className="mt-2 text-xs font-bold text-red-300">{error}</p> : null}
+    </div>
+  );
+}
+
+function HeartControl({ item, onChanged }: { item: Observation; onChanged: (id: string, heartCount: number, hearted: boolean) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const hearted = Boolean(item.hearted);
+  const heartCount = Number(item.heartCount) || 0;
+
+  async function toggle() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/observations/${item.id}/heart`, {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hearted: !hearted }),
+      });
+      const result = (await response.json().catch(() => ({}))) as { ok?: unknown; heartCount?: unknown; hearted?: unknown; message?: string };
+      if (!response.ok) throw new Error(result.message || "하트를 저장하지 못했습니다.");
+      if (result.ok !== true || typeof result.hearted !== "boolean" || typeof result.heartCount !== "number" || !Number.isSafeInteger(result.heartCount) || result.heartCount < 0) throw new Error("하트 저장 확인을 받지 못했습니다. 다시 시도해 주세요.");
+      onChanged(item.id, result.heartCount, result.hearted);
+    } catch (toggleError) {
+      setError(toggleError instanceof Error ? toggleError.message : "하트를 저장하지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => void toggle()}
+        disabled={busy}
+        aria-pressed={hearted}
+        aria-label={`${item.studentNumber}번 ${item.studentName} 기록 하트 ${hearted ? "취소하기" : "보내기"} (현재 ${heartCount}개)`}
+        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold transition disabled:opacity-50 ${hearted ? "border-amber-400/60 bg-amber-400/10 text-amber-200" : "border-space-600 bg-space-900 text-slate-200 hover:border-amber-400"}`}
+      >
+        <span aria-hidden="true">{hearted ? "♥" : "♡"}</span>
+        <span>{heartCount}개</span>
+      </button>
+      {error ? <p role="alert" className="mt-2 text-xs font-bold text-red-300">{error}</p> : null}
+    </div>
   );
 }
 
@@ -511,6 +618,14 @@ export default function AdminPage() {
     const result = (await response.json().catch(() => ({}))) as { message?: string };
     if (!response.ok) return setMessage(result.message || "공개 상태를 바꾸지 못했습니다.");
     setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, status } : entry)));
+  }
+
+  function applyTeacherFeedback(id: string, teacherFeedback: string) {
+    setItems((current) => current.map((entry) => (entry.id === id ? { ...entry, teacherFeedback } : entry)));
+  }
+
+  function applyHeartState(id: string, heartCount: number, hearted: boolean) {
+    setItems((current) => current.map((entry) => (entry.id === id ? { ...entry, heartCount, hearted } : entry)));
   }
 
   function beginObservedAtCorrection(item: Observation) {
@@ -857,6 +972,8 @@ export default function AdminPage() {
                     })()}
                   </div>
                   {item.memo ? <p className="mt-3 rounded-xl bg-space-900 p-3 text-sm leading-6 text-slate-300">{item.memo}</p> : null}
+                  <TeacherFeedbackEditor item={item} onSaved={applyTeacherFeedback} />
+                  <HeartControl item={item} onChanged={applyHeartState} />
                   {editingObservationId === item.id ? (
                     <form onSubmit={(event) => void saveObservedAtCorrection(event, item)} className="mt-3 space-y-3 rounded-xl border border-amber-400/25 bg-amber-400/5 p-3">
                       <label className="block text-xs font-bold text-amber-100">정정할 관찰 시각

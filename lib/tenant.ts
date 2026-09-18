@@ -595,6 +595,7 @@ export async function deleteTeacherAccount(accountId: string) {
   const db = getEnv().DB;
   const statements = classes.flatMap((teacherClass) => [
     db.prepare("DELETE FROM image_tickets WHERE teacher_id = ?").bind(teacherClass.id),
+    db.prepare("DELETE FROM observation_hearts WHERE class_id = ?").bind(teacherClass.id),
     db.prepare("DELETE FROM submission_events WHERE teacher_id = ?").bind(teacherClass.id),
     db.prepare("DELETE FROM submission_receipts WHERE teacher_id = ?").bind(teacherClass.id),
   ]);
@@ -609,6 +610,7 @@ export async function deleteTeacherClass(teacherId: string) {
   const db = getEnv().DB;
   await db.batch([
     db.prepare("DELETE FROM image_tickets WHERE teacher_id = ?").bind(teacherId),
+    db.prepare("DELETE FROM observation_hearts WHERE class_id = ?").bind(teacherId),
     db.prepare("DELETE FROM submission_events WHERE teacher_id = ?").bind(teacherId),
     db.prepare("DELETE FROM submission_receipts WHERE teacher_id = ?").bind(teacherId),
     db.prepare("DELETE FROM teacher_connections WHERE id = ?").bind(teacherId),

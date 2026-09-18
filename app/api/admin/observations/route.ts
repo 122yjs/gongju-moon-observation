@@ -1,5 +1,6 @@
 import { getTeacherSession } from "../../../../lib/auth";
 import { ensureTeacherSummarySheet, getTeacherAccessToken, listObservationRows } from "../../../../lib/google-drive";
+import { getHeartStates, getHeartViewer } from "../../../../lib/hearts";
 import { errorResponse, HttpError, json } from "../../../../lib/http";
 import { decodeCursor, encodeCursor } from "../../../../lib/observations";
 import { getTeacherById, seedImageTickets } from "../../../../lib/tenant";
@@ -23,6 +24,13 @@ export async function GET(request: Request) {
       cursor,
       includeHidden: true,
     });
+
+    const viewer = await getHeartViewer(request, teacher.id);
+    const hearts = await getHeartStates(
+      teacher.id,
+      page.items.map((item) => item.id),
+      viewer.voterKey,
+    );
     await seedImageTickets(
       teacher.id,
       page.items.map((item) => ({
@@ -48,13 +56,16 @@ export async function GET(request: Request) {
         createdAt: item.createdAt,
         imageUrl: `/api/images/${item.id}`,
         driveUrl: item.imageWebViewUrl,
+        teacherFeedback: item.teacherFeedback,
+        heartCount: hearts[item.id]?.heartCount ?? 0,
+        hearted: hearts[item.id]?.hearted ?? false,
       })),
       total: page.total,
       hasMore: page.hasMore,
       nextCursor: page.nextCursor
         ? encodeCursor(page.nextCursor.createdAt, page.nextCursor.id)
         : null,
-    });
+    }, viewer.cookie ? { headers: { "Set-Cookie": viewer.cookie } } : undefined);
   } catch (error) {
     return errorResponse(error);
   }
