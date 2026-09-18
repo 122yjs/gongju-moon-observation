@@ -85,7 +85,7 @@ test('successful submission clears the draft without resurrecting it on pagehide
   first.element('studentName').value = '김학생';
   first.events.get('observationForm:input')({ target: first.element('studentName') });
   first.context.api.attachPhoto(new Blob(['photo'], { type: 'image/jpeg' }));
-  first.context.fetch = async () => ({ ok: true, status: 201, json: async () => ({ ok: true, id: 'saved-observation' }) });
+  first.context.fetch = async () => Response.json({ ok: true, id: 'saved-observation' }, { status: 201 });
   await first.context.api.submitObservation({ preventDefault() {} });
   first.events.get('pagehide')();
   assert.equal(saved.getItem('moon-observation-draft-v1'), null);
