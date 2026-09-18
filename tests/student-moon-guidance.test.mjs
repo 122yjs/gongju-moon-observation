@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
 
+// 이 파일의 공주 관찰 시각 기대값은 한국 시간대의 브라우저를 기준으로 합니다.
+process.env.TZ = "Asia/Seoul";
+
 const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
 

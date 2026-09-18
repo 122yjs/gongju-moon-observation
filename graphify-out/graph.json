@@ -5279,7 +5279,7 @@
       "file_type": "code",
       "norm_label": "classlist()",
       "source_file": "tests/student-moon-guidance.test.mjs",
-      "source_location": "L9"
+      "source_location": "L12"
     },
     {
       "id": "tests_student_moon_guidance_test_compassrosedegrees",
@@ -5291,7 +5291,7 @@
       "file_type": "code",
       "norm_label": "compassrosedegrees()",
       "source_file": "tests/student-moon-guidance.test.mjs",
-      "source_location": "L359"
+      "source_location": "L362"
     },
     {
       "id": "tests_student_moon_guidance_test_connectedcompasspage",
@@ -5303,7 +5303,7 @@
       "file_type": "code",
       "norm_label": "connectedcompasspage()",
       "source_file": "tests/student-moon-guidance.test.mjs",
-      "source_location": "L364"
+      "source_location": "L367"
     },
     {
       "id": "tests_student_moon_guidance_test_findsampleobservationdays",
@@ -5315,7 +5315,7 @@
       "file_type": "code",
       "norm_label": "findsampleobservationdays()",
       "source_file": "tests/student-moon-guidance.test.mjs",
-      "source_location": "L489"
+      "source_location": "L492"
     },
     {
       "id": "tests_student_moon_guidance_test_loadstudentpage",
@@ -5327,7 +5327,7 @@
       "file_type": "code",
       "norm_label": "loadstudentpage()",
       "source_file": "tests/student-moon-guidance.test.mjs",
-      "source_location": "L28"
+      "source_location": "L31"
     },
     {
       "id": "tests_student_moon_guidance_test_requestpermission",
@@ -5339,7 +5339,7 @@
       "file_type": "code",
       "norm_label": "requestpermission()",
       "source_file": "tests/student-moon-guidance.test.mjs",
-      "source_location": "L299"
+      "source_location": "L302"
     },
     {
       "id": "tests_student_moon_guidance_test_settimeout",
@@ -5351,7 +5351,7 @@
       "file_type": "code",
       "norm_label": "settimeout()",
       "source_file": "tests/student-moon-guidance.test.mjs",
-      "source_location": "L312"
+      "source_location": "L315"
     },
     {
       "id": "db_index_getdb",
@@ -8184,7 +8184,7 @@
       "file_type": "code",
       "norm_label": "html",
       "source_file": "tests/student-moon-guidance.test.mjs",
-      "source_location": "L6"
+      "source_location": "L9"
     },
     {
       "id": "db_index",
@@ -19881,7 +19881,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "tests/student-moon-guidance.test.mjs",
-      "source_location": "L375",
+      "source_location": "L378",
       "weight": 1.0
     },
     {
@@ -19893,7 +19893,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "tests/student-moon-guidance.test.mjs",
-      "source_location": "L44",
+      "source_location": "L47",
       "weight": 1.0
     },
     {
@@ -20421,7 +20421,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "tests/student-moon-guidance.test.mjs",
-      "source_location": "L28",
+      "source_location": "L31",
       "weight": 1.0
     },
     {
@@ -20433,7 +20433,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "tests/student-moon-guidance.test.mjs",
-      "source_location": "L359",
+      "source_location": "L362",
       "weight": 1.0
     },
     {
@@ -20445,7 +20445,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "tests/student-moon-guidance.test.mjs",
-      "source_location": "L364",
+      "source_location": "L367",
       "weight": 1.0
     },
     {
@@ -20457,7 +20457,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "tests/student-moon-guidance.test.mjs",
-      "source_location": "L489",
+      "source_location": "L492",
       "weight": 1.0
     },
     {
@@ -31876,13 +31876,24 @@
     },
     {
       "source": "tests_student_moon_guidance_test",
+      "target": "tests_student_moon_guidance_test_classlist",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/student-moon-guidance.test.mjs",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_student_moon_guidance_test",
       "target": "tests_student_moon_guidance_test_requestpermission",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/student-moon-guidance.test.mjs",
-      "source_location": "L299",
+      "source_location": "L302",
       "weight": 1.0
     },
     {
@@ -31893,23 +31904,12 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/student-moon-guidance.test.mjs",
-      "source_location": "L312",
+      "source_location": "L315",
       "weight": 1.0
     },
     {
       "source": "tests_student_moon_guidance_test",
       "target": "tests_student_moon_guidance_test_html",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "tests/student-moon-guidance.test.mjs",
-      "source_location": "L6",
-      "weight": 1.0
-    },
-    {
-      "source": "tests_student_moon_guidance_test",
-      "target": "tests_student_moon_guidance_test_classlist",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -36361,5 +36361,5 @@
       "source_file": "tests/fixtures/oriented-320x480-o6.jpg"
     }
   ],
-  "built_at_commit": "79db94508fe5093037dec29da2475e8a5421c436"
+  "built_at_commit": "8b5b4063a7b7fdc0ee317b73784e798720830147"
 }

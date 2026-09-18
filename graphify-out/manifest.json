@@ -462,10 +462,10 @@
     "semantic_hash": "7e78b10acf6f75fc6a66da81218d37ce"
   },
   "tests/student-moon-guidance.test.mjs": {
-    "mtime": 1789728465.1083748,
-    "seen": 1789729197.655489,
-    "ast_hash": "f61c6db9338dbeeaf7e4cd3c3c43ee20",
-    "semantic_hash": "f61c6db9338dbeeaf7e4cd3c3c43ee20"
+    "mtime": 1789774605.0613227,
+    "seen": 1789774691.828238,
+    "ast_hash": "2bfa050ee244dbecc2eccf3cd7bcac81",
+    "semantic_hash": "2bfa050ee244dbecc2eccf3cd7bcac81"
   },
   "tests/student-number-range.test.mjs": {
     "mtime": 1789728465.1088078,

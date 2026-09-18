@@ -1,7 +1,7 @@
 # Graph Report - juvenile-tiger  (2026-09-19)
 
 ## Corpus Check
-- 117 files · ~198,170 words
+- 117 files · ~198,191 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 10 file(s) not represented in the graph (top: .css 3, (none) 2, .webmanifest 1)
 
@@ -102,6 +102,9 @@
 - None detected.
 
 ## Hyperedges (group relationships)
+- **Automatic PR Creation Flow (branch triggers, existence check, base resolution, body, create)** — github_workflows_auto_pr_branch_trigger_patterns, github_workflows_auto_pr_pr_existence_check, github_workflows_auto_pr_base_branch_resolution, github_workflows_auto_pr_pr_body_generation, github_workflows_auto_pr_automatic_pr_creation [EXTRACTED 1.00]
+- **Graphify Code-Only CI Pipeline (pinned CLI, extraction, artifact, PR conflict gate)** — github_workflows_ci_pinned_graphifyy_version, github_workflows_ci_code_only_graphify, github_workflows_ci_graphify_code_only_artifact, github_workflows_ci_community_conflict_gate [EXTRACTED 1.00]
+- **Automated PR Lifecycle (auto-created PR, CI run, community conflict gate)** — github_workflows_auto_pr_automatic_pr_creation, github_workflows_ci_ci_workflow, github_workflows_ci_community_conflict_gate [INFERRED 0.75]
 - **배포 파이프라인 단계 (정적 CSS → vinext 빌드 → D1 마이그레이션 → 게이트 → wrangler deploy)** — github_workflows_deploy_static_css_build_step, github_workflows_deploy_vinext_build_step, github_workflows_deploy_d1_migration_step, github_workflows_deploy_migration_gate_step, github_workflows_deploy_wrangler_deploy_step [EXTRACTED 1.00]
 - **저장 구조 (학생 브라우저 → 중앙 Worker API → 교사 Drive/Sheets/중앙 D1)** — readme_student_browser, readme_central_worker_api, readme_teacher_google_drive_photos, readme_teacher_google_sheets_records, readme_central_d1 [EXTRACTED 1.00]
 - **하트 반응 흐름 (쿠키 식별·D1 고유 제약·재확인 보상·마이그레이션)** — readme_heart_reaction_store, readme_class_browser_cookie_identity, readme_heart_compensation_on_verification_failure, readme_distributed_consistency_policy, readme_d1_heart_table_migration [EXTRACTED 1.00]
@@ -127,9 +130,6 @@
 - **original-5222x6024.jpg Fixture Lifecycle (Generate, Load, Assert, Upload-check)** — scripts_make_fixtures_save_pattern, tests_fixtures_original_5222x6024_baseline_jpeg_fixture, tests_codec_test_requirefixture, scripts_verify_mobile_upload [INFERRED 0.85]
 - **31 MP Baseline JPEG Decode Verification (content, size, encoding)** — tests_fixtures_original_5222x6024_quadrant_color_pattern, tests_fixtures_original_5222x6024_large_dimension_stress, tests_fixtures_original_5222x6024_chroma_subsampling_420 [INFERRED 0.85]
 - **Progressive Fixture Composition (scene, scale, encoding)** — tests_fixtures_progressive_5222x6024_progressive_jpeg_fixture, tests_fixtures_progressive_5222x6024_color_block_pattern, tests_fixtures_progressive_5222x6024_large_format_canvas, tests_fixtures_progressive_5222x6024_jpeg_encoding_profile [EXTRACTED 1.00]
-- **Graphify Code-Only CI Pipeline (pinned CLI, extraction, artifact, PR conflict gate)** — github_workflows_ci_pinned_graphifyy_version, github_workflows_ci_code_only_graphify, github_workflows_ci_graphify_code_only_artifact, github_workflows_ci_community_conflict_gate [EXTRACTED 1.00]
-- **Automated PR Lifecycle (auto-created PR, CI run, community conflict gate)** — github_workflows_auto_pr_automatic_pr_creation, github_workflows_ci_ci_workflow, github_workflows_ci_community_conflict_gate [INFERRED 0.75]
-- **Automatic PR Creation Flow (branch triggers, existence check, base resolution, body, create)** — github_workflows_auto_pr_branch_trigger_patterns, github_workflows_auto_pr_pr_existence_check, github_workflows_auto_pr_base_branch_resolution, github_workflows_auto_pr_pr_body_generation, github_workflows_auto_pr_automatic_pr_creation [EXTRACTED 1.00]
 
 ## Communities (63 total, 7 thin omitted)
 
