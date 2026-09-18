@@ -1,7 +1,6 @@
 name: CI
 
-# 공개 저장소 CI입니다. 비공개 reusable workflow(122yjs/gha-reusable)를 호출하지 않고
-# Node 검사와 code-only Graphify 커뮤니티 충돌 검사를 이 워크플로 안에서 직접 수행합니다.
+# Public reusable workflow shared by the 122yjs repositories.
 on:
   pull_request:
   push:
@@ -9,108 +8,16 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
+  checks: read
+  statuses: read
 
 jobs:
-  ci:
-    name: Node checks and Graphify community conflicts
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      pull-requests: read
-      checks: read
-      statuses: read
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Test
-        run: npm test
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Graphify
-        run: python -m pip install "graphifyy==0.9.63"
-
-      # code-only Graphify (AST). 문서 Pass 아님.
-      # 생성 실패는 CI를 막지 않지만, 아래 커뮤니티 충돌 검사는 계속 필수입니다.
-      - name: Generate code-only Graphify graph
-        id: graphify
-        continue-on-error: true
-        run: graphify extract . --code-only
-
-      - name: Upload Graphify artifact
-        if: always() && steps.graphify.outcome == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: graphify-code-only
-          path: |
-            graphify-out/graph.json
-            graphify-out/graph.html
-            graphify-out/GRAPH_REPORT.md
-          if-no-files-found: warn
-
-      - name: Check PR community conflicts
-        if: github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          PR_BASE_REF: ${{ github.base_ref }}
-        run: |
-          set -euo pipefail
-
-          base="${PR_BASE_REF}"
-
-          open_prs="$(gh pr list --state open --base "${base}" --repo "${GH_REPO}" --json number --jq 'length')"
-
-          if (( open_prs <= 1 )); then
-            message="Skipped: only ${open_prs} open PR(s) target ${base}; community conflicts need at least two."
-            echo "${message}"
-            {
-              echo "### PR community conflicts"
-              echo
-              echo "${message}"
-            } >> "${GITHUB_STEP_SUMMARY}"
-            exit 0
-          fi
-
-          log="${RUNNER_TEMP}/graphify-prs-conflicts.log"
-          status=0
-          graphify prs --conflicts --base "${base}" --repo "${GH_REPO}" >"${log}" 2>&1 || status=$?
-
-          cat "${log}"
-          {
-            echo "### PR community conflicts"
-            echo
-            echo "Base: \`${base}\` — open PRs targeting it: ${open_prs}"
-            echo
-            echo '```text'
-            cat "${log}"
-            echo '```'
-          } >> "${GITHUB_STEP_SUMMARY}"
-
-          if (( status != 0 )); then
-            echo "::error::graphify prs --conflicts exited with code ${status}."
-            exit "${status}"
-          fi
-
-          if grep -qF 'Community conflicts (PRs sharing the same graph community)' "${log}"; then
-            echo "::error::Community conflicts detected among open PRs targeting ${base}."
-            exit 1
-          fi
+  call-reusable:
+    uses: 122yjs/gha-reusable/.github/workflows/reusable-ci.yml@main
+    with:
+      # code-only Graphify (AST), not a documentation pass.
+      run_graphify: true
+      run_pr_conflicts: true
+      node_version: "22"
+      python_version: "3.12"
