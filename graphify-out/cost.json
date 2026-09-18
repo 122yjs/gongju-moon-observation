@@ -1,0 +1,69 @@
+{
+  "runs": [
+    {
+      "date": "2026-09-18T10:59:57.658792+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 110,
+      "token_accounting": "unknown - semantic extraction ran on host-agent subagents; per-agent usage was not exposed to the pipeline, so 0 here is a placeholder, NOT a zero-cost measurement"
+    },
+    {
+      "date": "2026-09-18T11:34:20.951507+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 116,
+      "kind": "incremental-refresh",
+      "token_accounting": "UNKNOWN - semantic extraction ran on host-agent subagents; per-agent usage was not exposed to the pipeline. 0 is a schema placeholder, NOT a zero-cost measurement."
+    },
+    {
+      "date": "2026-09-18T11:53:23.748305+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 116,
+      "kind": "incremental-refresh-3-files",
+      "token_accounting": "UNKNOWN - semantic extraction ran on host-agent subagents; per-agent usage was not exposed to the pipeline. 0 is a schema placeholder, NOT a zero-cost measurement."
+    },
+    {
+      "date": "2026-09-18T12:03:18.280195+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 117,
+      "kind": "incremental-refresh-adr-doc",
+      "token_accounting": "UNKNOWN - semantic extraction ran on host-agent subagents; per-agent usage was not exposed to the pipeline. 0 is a schema placeholder, NOT a zero-cost measurement."
+    },
+    {
+      "date": "2026-09-18T12:16:48.471511+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 117,
+      "kind": "incremental-refresh-readme-health-contract",
+      "token_accounting": "UNKNOWN - semantic extraction ran on host-agent subagents; per-agent usage was not exposed to the pipeline. 0 is a schema placeholder, NOT a zero-cost measurement."
+    },
+    {
+      "date": "2026-09-18T12:31:33.182624+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 117,
+      "kind": "incremental-refresh-heart-compensation-readme",
+      "token_accounting": "UNKNOWN - semantic extraction ran on host-agent subagents; per-agent usage was not exposed to the pipeline. 0 is a schema placeholder, NOT a zero-cost measurement."
+    },
+    {
+      "date": "2026-09-18T23:31:43.093609+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 117,
+      "kind": "incremental-refresh-ci-workflows",
+      "token_accounting": "UNKNOWN - semantic extraction ran on host-agent subagents; per-agent usage was not exposed to the pipeline. 0 is a schema placeholder, NOT a zero-cost measurement."
+    },
+    {
+      "date": "2026-09-18T23:38:11.839001+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 117,
+      "kind": "incremental-refresh-moon-test-tz",
+      "token_accounting": "UNKNOWN - semantic extraction ran on host-agent subagents; per-agent usage was not exposed to the pipeline. 0 is a schema placeholder, NOT a zero-cost measurement."
+    }
+  ],
+  "total_input_tokens": 0,
+  "total_output_tokens": 0
+}

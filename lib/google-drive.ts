@@ -114,6 +114,8 @@ export interface DriveObservation {
   correctedAt?: string;
   correctionHistory?: string;
   memo: string;
+  /** Plain-text teacher feedback shown with the observation. Empty string means no feedback. */
+  teacherFeedback: string;
   imageFileId: string;
   imageType: string;
   imageBytes: number;
@@ -383,13 +385,14 @@ const OBSERVATION_HEADERS = [
   "최근 정정 시각 (UTC)",
   "관찰 시각 정정 이력",
   "사진 촬영 시각 (기기 기록)",
+  "교사 피드백",
 ];
 
 async function ensureObservationHeaders(
   accessToken: string,
   teacher: Pick<TeacherDriveResources, "spreadsheetId" | "sheetTitle">,
 ) {
-  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A1:Q1`;
+  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A1:R1`;
   const current = await googleJson<ValueRange>(
     `${SHEETS_API}/spreadsheets/${encodeURIComponent(teacher.spreadsheetId)}/values/${encodeURIComponent(range)}?${new URLSearchParams({ majorDimension: "ROWS", valueRenderOption: "UNFORMATTED_VALUE" })}`,
     accessToken,
@@ -713,6 +716,7 @@ export async function appendObservationRow(
   teacher: TeacherConnection,
   observation: Omit<DriveObservation, "rowNumber">,
 ) {
+  // Feedback lives in column R, which new submissions intentionally leave empty.
   const range = `${quoteSheetTitle(teacher.sheetTitle)}!A:Q`;
   const query = new URLSearchParams({
     valueInputOption: "RAW",
@@ -777,6 +781,7 @@ function parseObservation(row: unknown[], rowNumber: number): DriveObservation |
     correctedAt: cell(row, 14) || undefined,
     correctionHistory: cell(row, 15) || undefined,
     memo: cell(row, 6),
+    teacherFeedback: cell(row, 17),
     imageFileId: cell(row, 7),
     imageType: cell(row, 8) || "image/jpeg",
     imageBytes: Number.isFinite(imageBytes) ? imageBytes : 0,
@@ -788,7 +793,7 @@ function parseObservation(row: unknown[], rowNumber: number): DriveObservation |
 }
 
 async function readObservationRows(accessToken: string, teacher: TeacherConnection) {
-  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A2:Q${MAX_SHEET_ROWS + 1}`;
+  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A2:R${MAX_SHEET_ROWS + 1}`;
   const query = new URLSearchParams({ majorDimension: "ROWS", valueRenderOption: "UNFORMATTED_VALUE" });
   const response = await googleJson<ValueRange>(
     `${SHEETS_API}/spreadsheets/${encodeURIComponent(teacher.spreadsheetId)}/values/${encodeURIComponent(range)}?${query}`,
@@ -881,6 +886,20 @@ export async function updateObservationObservedAt(
     [[observedAt, correctedAt, correctionHistory]],
   );
   return { observedAt, correctedAt, correctionHistory };
+}
+
+export async function updateObservationFeedback(
+  accessToken: string,
+  teacher: TeacherConnection,
+  observation: DriveObservation,
+  teacherFeedback: string,
+) {
+  await updateSheetValues(
+    accessToken,
+    teacher.spreadsheetId,
+    `${quoteSheetTitle(teacher.sheetTitle)}!R${observation.rowNumber}`,
+    [[teacherFeedback]],
+  );
 }
 
 export async function deleteObservation(

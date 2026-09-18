@@ -34,18 +34,13 @@ jobs:
               base="master"
             fi
           fi
-          if gh pr view --head "$branch" >/dev/null 2>&1; then
+          if gh pr view "$branch" >/dev/null 2>&1; then
             echo "PR already exists for $branch"
             exit 0
           fi
+          printf -v body '## Summary\nAutomated PR for `%s`.\n\n## Test plan\n- [ ] CI green\n- [ ] Smoke-check the changed paths\n' "$branch"
           gh pr create \
             --base "$base" \
             --head "$branch" \
             --title "$branch" \
-            --body "## Summary
-Automated PR for \\`$branch\\`.
-
-## Test plan
-- [ ] CI green
-- [ ] Smoke-check the changed paths
-"
+            --body "$body"

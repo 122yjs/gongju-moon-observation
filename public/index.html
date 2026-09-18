@@ -2436,9 +2436,83 @@
           memo.textContent = item.memo;
           content.appendChild(memo);
         }
+        const feedbackText = typeof item.teacherFeedback === 'string' ? item.teacherFeedback : '';
+        if (feedbackText.trim()) {
+          const feedback = document.createElement('p');
+          feedback.className = 'mt-3 rounded-xl border border-blue-400/25 bg-space-900/60 p-3 text-sm leading-6 text-blue-100';
+          feedback.style.whiteSpace = 'pre-line';
+          const feedbackLabel = document.createElement('span');
+          feedbackLabel.className = 'font-bold text-amber-200';
+          feedbackLabel.textContent = '선생님 피드백';
+          feedback.append(feedbackLabel, document.createTextNode(`\n${feedbackText}`));
+          content.appendChild(feedback);
+        }
+        content.appendChild(renderHeartControl(item));
         card.append(imageArea, content);
         gallery.appendChild(card);
       });
+    }
+
+    function renderHeartControl(item) {
+      const wrap = document.createElement('div');
+      wrap.className = 'mt-3';
+      const row = document.createElement('div');
+      row.className = 'flex items-center gap-2';
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'inline-flex items-center gap-2 rounded-full border border-space-600 bg-space-900 px-3 py-1.5 text-xs font-bold text-slate-200 transition hover:border-amber-400 disabled:opacity-50';
+      const icon = document.createElement('span');
+      icon.setAttribute('aria-hidden', 'true');
+      const count = document.createElement('span');
+      button.append(icon, count);
+      const error = document.createElement('p');
+      error.className = 'mt-2 hidden text-xs font-bold text-red-300';
+      error.setAttribute('role', 'alert');
+      let hearted = Boolean(item.hearted);
+      let heartCount = Number(item.heartCount) || 0;
+
+      function paint() {
+        icon.textContent = hearted ? '♥' : '♡';
+        count.textContent = `${heartCount}개`;
+        button.setAttribute('aria-pressed', hearted ? 'true' : 'false');
+        button.setAttribute('aria-label', hearted
+          ? `${item.studentNumber}번 ${item.displayName} 기록의 하트를 취소하기 (현재 ${heartCount}개)`
+          : `${item.studentNumber}번 ${item.displayName} 기록에 하트 보내기 (현재 ${heartCount}개)`);
+        button.classList.toggle('border-space-600', !hearted);
+        button.classList.toggle('border-amber-400/60', hearted);
+        button.classList.toggle('text-slate-200', !hearted);
+        button.classList.toggle('text-amber-200', hearted);
+      }
+
+      button.addEventListener('click', async () => {
+        if (button.disabled) return;
+        button.disabled = true;
+        error.classList.add('hidden');
+        try {
+          const response = await fetch(`/api/observations/${item.id}/heart`, {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hearted: !hearted })
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.message || '하트를 저장하지 못했어요.');
+          if (result.ok !== true || typeof result.hearted !== 'boolean' || !Number.isSafeInteger(result.heartCount) || result.heartCount < 0) throw new Error('하트 저장 확인을 받지 못했어요. 다시 시도해 주세요.');
+          hearted = result.hearted;
+          heartCount = result.heartCount;
+          paint();
+        } catch (requestError) {
+          error.textContent = requestError && requestError.message ? requestError.message : '하트를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.';
+          error.classList.remove('hidden');
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      paint();
+      row.appendChild(button);
+      wrap.append(row, error);
+      return wrap;
     }
 
     function formatObservedAt(value) {

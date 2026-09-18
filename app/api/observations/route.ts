@@ -7,6 +7,7 @@ import {
   uploadObservationPhoto,
 } from "../../../lib/google-drive";
 import { assertSameOrigin, errorResponse, HttpError, json } from "../../../lib/http";
+import { getHeartStates, getHeartViewer } from "../../../lib/hearts";
 import {
   decodeCursor,
   detectImageType,
@@ -75,6 +76,13 @@ export async function GET(request: Request) {
         status: item.status,
       })),
     );
+
+    const viewer = await getHeartViewer(request, teacher.id);
+    const hearts = await getHeartStates(
+      teacher.id,
+      page.items.map((item) => item.id),
+      viewer.voterKey,
+    );
     return json({
       items: page.items.map((item) => ({
         id: item.id,
@@ -83,13 +91,16 @@ export async function GET(request: Request) {
         observedAt: item.observedAt,
         memo: item.memo,
         imageUrl: `/api/images/${item.id}`,
+        teacherFeedback: item.teacherFeedback,
+        heartCount: hearts[item.id]?.heartCount ?? 0,
+        hearted: hearts[item.id]?.hearted ?? false,
       })),
       total: page.total,
       hasMore: page.hasMore,
       nextCursor: page.nextCursor
         ? encodeCursor(page.nextCursor.createdAt, page.nextCursor.id)
         : null,
-    });
+    }, viewer.cookie ? { headers: { "Set-Cookie": viewer.cookie } } : undefined);
   } catch (error) {
     return errorResponse(error);
   }
@@ -150,6 +161,7 @@ export async function POST(request: Request) {
         observedAt: input.observedAt,
         photoCapturedAt: input.photoCapturedAt,
         memo: input.memo,
+        teacherFeedback: "",
         imageFileId: uploaded.id,
         imageType: image.contentType,
         imageBytes: bytes.byteLength,

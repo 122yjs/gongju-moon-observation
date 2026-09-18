@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 // 이전 R2/D1 배포 자료를 삭제할 때만 읽는 호환 테이블입니다.
 // 새 제출은 이 테이블에 기록하지 않습니다.
@@ -130,5 +130,20 @@ export const imageTickets = sqliteTable(
   (table) => [
     index("image_tickets_teacher_idx").on(table.teacherId),
     index("image_tickets_expires_idx").on(table.expiresAt),
+  ],
+);
+
+// 좋아요는 로그인 정보가 아니라 브라우저별 익명 식별자로 한 번만 기록합니다.
+// (class_id, observation_id, voter_key) 기본 키가 중복 저장을 막습니다.
+export const observationHearts = sqliteTable(
+  "observation_hearts",
+  {
+    classId: text("class_id").notNull(),
+    observationId: text("observation_id").notNull(),
+    voterKey: text("voter_key").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    primaryKey({ columns: [table.classId, table.observationId, table.voterKey] }),
   ],
 );
