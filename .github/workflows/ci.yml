@@ -2,6 +2,7 @@ name: CI
 
 # Public reusable workflow shared by the 122yjs repositories.
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches: [main, master]

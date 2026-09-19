@@ -9,6 +9,7 @@ on:
       - "mb/**"
 
 permissions:
+  actions: write
   contents: read
   pull-requests: write
 
@@ -44,3 +45,4 @@ jobs:
             --head "$branch" \
             --title "$branch" \
             --body "$body"
+          gh workflow run ci.yml --ref "$branch"
