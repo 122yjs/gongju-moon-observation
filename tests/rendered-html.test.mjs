@@ -156,17 +156,18 @@ test("opens a protected Korean-time summary while preserving the raw observation
   assert.match(drive, /HYPERLINK\(\$\{raw\}!M2:M\$\{endRow\},"사진 열기"\)/);
   assert.match(drive, /\$\{raw\}!K2:K\$\{endRow\}="visible"/);
   assert.match(drive, /warningOnly: true/);
-  assert.match(drive, /await ensureTeacherSummarySheet\(accessToken/);
+  assert.match(drive, /ensureTeacherSummarySheetUnlocked/);
   assert.match(drive, /updateObservationObservedAt/);
   assert.match(drive, /!N\$\{observation\.rowNumber\}:P\$\{observation\.rowNumber\}/);
 
-  assert.match(drive, /const range = `\$\{quoteSheetTitle\(teacher\.sheetTitle\)\}!A:Q`/);
+  assert.match(drive, /const range = `\$\{quoteSheetTitle\(teacher\.sheetTitle\)\}!A:S`/);
   assert.match(drive, /sheetId: teacher\.sheetId/);
-  assert.match(drive, /sheetTitle,\s*\n\s*};/);
+  assert.match(drive, /sheetTitle,\s*\n\s*summarySheetId,\s*\n\s*sheetSchemaVersion: SHEET_SCHEMA_VERSION/);
 
-  assert.match(spreadsheetRoute, /ensureTeacherSummarySheet\(accessToken, target\)/);
+  assert.match(spreadsheetRoute, /export async function POST/);
+  assert.match(spreadsheetRoute, /ensureTeacherSummarySheet\(accessToken, teacher\)/);
   assert.match(spreadsheetRoute, /\/preview`/);
-  assert.match(spreadsheetRoute, /previewUrl\.searchParams\.set\("gid", String\(summarySheetId\)\)/);
+  assert.match(spreadsheetRoute, /previewUrl\.searchParams\.set\("gid", String\(target\.summarySheetId\)\)/);
   assert.match(inviteRoute, /\/api\/admin\/spreadsheet\?classId=/);
   assert.match(classesRoute, /\/api\/admin\/spreadsheet\?classId=/);
   assert.match(settingsRoute, /\/api\/admin\/spreadsheet\?classId=/);

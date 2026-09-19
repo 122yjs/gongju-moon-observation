@@ -3,6 +3,7 @@ import {
   appendObservationRow,
   deleteDriveFile,
   getTeacherAccessToken,
+  isSheetWriteUncertainError,
   listObservationRows,
   uploadObservationPhoto,
 } from "../../../lib/google-drive";
@@ -167,11 +168,14 @@ export async function POST(request: Request) {
         imageBytes: bytes.byteLength,
         status: "visible",
         createdAt,
+        updatedAt: createdAt,
         imageWebViewUrl: uploaded.webViewLink,
       });
     } catch (error) {
-      await deleteDriveFile(accessToken, uploaded.id).catch(() => undefined);
-      uploadedFileId = null;
+      if (!isSheetWriteUncertainError(error)) {
+        await deleteDriveFile(accessToken, uploaded.id).catch(() => undefined);
+        uploadedFileId = null;
+      }
       throw error;
     }
 

@@ -2,8 +2,10 @@ import { getTeacherSession } from "../../../../lib/auth";
 import {
   ensureTeacherSummarySheet,
   getTeacherAccessToken,
+  recoverSheetWriteLock,
+  SHEET_SCHEMA_VERSION,
 } from "../../../../lib/google-drive";
-import { errorResponse, HttpError } from "../../../../lib/http";
+import { assertSameOrigin, errorResponse, HttpError, json } from "../../../../lib/http";
 import { getTeacherById } from "../../../../lib/tenant";
 
 async function requireTeacher(request: Request) {
@@ -27,13 +29,32 @@ export async function GET(request: Request) {
       target = selected;
     }
 
-    const accessToken = await getTeacherAccessToken(teacher);
-    const summarySheetId = await ensureTeacherSummarySheet(accessToken, target);
+    if (!Number.isInteger(target.summarySheetId)) {
+      throw new HttpError(503, "시트 연결 점검을 먼저 실행해 주세요.");
+    }
     const previewUrl = new URL(
       `https://docs.google.com/spreadsheets/d/${encodeURIComponent(target.spreadsheetId)}/preview`,
     );
-    previewUrl.searchParams.set("gid", String(summarySheetId));
+    previewUrl.searchParams.set("gid", String(target.summarySheetId));
     return Response.redirect(previewUrl, 302);
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    assertSameOrigin(request);
+    const teacher = await requireTeacher(request);
+    const accessToken = await getTeacherAccessToken(teacher);
+    const recovery = await recoverSheetWriteLock(accessToken, teacher);
+    const summarySheetId = await ensureTeacherSummarySheet(accessToken, teacher);
+    return json({
+      ok: true,
+      sheetSchemaVersion: SHEET_SCHEMA_VERSION,
+      summarySheetId,
+      recovery,
+    });
   } catch (error) {
     return errorResponse(error);
   }

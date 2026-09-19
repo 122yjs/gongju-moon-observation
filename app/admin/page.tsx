@@ -6,6 +6,8 @@ import { QRCodeSVG } from "qrcode.react";
 
 interface Observation {
   id: string;
+  version?: string;
+  updatedAt?: string;
   studentNumber: number;
   studentName: string;
   observedAt: string;
@@ -23,6 +25,10 @@ interface Observation {
   heartCount: number;
   hearted: boolean;
 }
+
+type SavedObservation = Pick<Observation, "id" | "memo" | "teacherFeedback" | "observedAt" | "originalObservedAt" | "correctedAt" | "status"> & { version: string; updatedAt: string };
+type ObservationSaveResult = { ok?: boolean; observation?: SavedObservation; message?: string };
+const SAVE_CONFLICT_MESSAGE = "다른 변경 사항과 충돌했습니다. 입력 내용은 저장되지 않았습니다. 입력을 복사한 뒤 새로고침하여 최신 기록을 확인해 주세요.";
 
 function formatObservedAt(value: string) {
   return value ? value.replace("T", " ") : "-";
@@ -230,7 +236,7 @@ function clampFeedback(value: string) {
   return characters.length > FEEDBACK_MAX_CHARS ? characters.slice(0, FEEDBACK_MAX_CHARS).join("") : value;
 }
 
-function TeacherFeedbackEditor({ item, onSaved }: { item: Observation; onSaved: (id: string, teacherFeedback: string) => void }) {
+function TeacherFeedbackEditor({ item, onSaved }: { item: Observation; onSaved: (observation: SavedObservation, expectedVersion?: string) => void }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -246,12 +252,13 @@ function TeacherFeedbackEditor({ item, onSaved }: { item: Observation; onSaved: 
         method: "PATCH",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teacherFeedback: value }),
+        body: JSON.stringify({ teacherFeedback: value, version: item.version }),
       });
-      const result = (await response.json().catch(() => ({}))) as { ok?: unknown; teacherFeedback?: unknown; message?: string };
+      const result = (await response.json().catch(() => ({}))) as ObservationSaveResult;
+      if (response.status === 409) throw new Error(SAVE_CONFLICT_MESSAGE);
       if (!response.ok) throw new Error(result.message || "피드백을 저장하지 못했습니다.");
-      if (result.ok !== true || typeof result.teacherFeedback !== "string") throw new Error("피드백 저장 확인을 받지 못했습니다. 다시 시도해 주세요.");
-      onSaved(item.id, result.teacherFeedback);
+      if (result.ok !== true || result.observation?.id !== item.id) throw new Error("피드백 저장 확인을 받지 못했습니다. 다시 시도해 주세요.");
+      onSaved(result.observation, item.version);
       setDraft(null);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "피드백을 저장하지 못했습니다.");
@@ -334,6 +341,8 @@ export default function AdminPage() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [checkingSpreadsheet, setCheckingSpreadsheet] = useState(false);
+  const [spreadsheetMessage, setSpreadsheetMessage] = useState("");
   const [message, setMessage] = useState(() =>
     typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("error") || "",
   );
@@ -609,19 +618,45 @@ export default function AdminPage() {
 
   async function updateStatus(item: Observation) {
     const status = item.status === "visible" ? "hidden" : "visible";
-    const response = await fetch(`/api/admin/observations/${item.id}`, {
-      method: "PATCH",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    const result = (await response.json().catch(() => ({}))) as { message?: string };
-    if (!response.ok) return setMessage(result.message || "공개 상태를 바꾸지 못했습니다.");
-    setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, status } : entry)));
+    try {
+      const response = await fetch(`/api/admin/observations/${item.id}`, {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, version: item.version }),
+      });
+      const result = (await response.json().catch(() => ({}))) as ObservationSaveResult;
+      if (response.status === 409) return setMessage(SAVE_CONFLICT_MESSAGE);
+      if (!response.ok) return setMessage(result.message || "공개 상태를 바꾸지 못했습니다.");
+      if (result.observation?.id !== item.id) return setMessage("공개 상태 저장 확인을 받지 못했습니다.");
+      applyObservation(result.observation, item.version);
+    } catch {
+      setMessage("공개 상태를 바꾸지 못했습니다.");
+    }
   }
 
-  function applyTeacherFeedback(id: string, teacherFeedback: string) {
-    setItems((current) => current.map((entry) => (entry.id === id ? { ...entry, teacherFeedback } : entry)));
+  function applyObservation(observation: SavedObservation, expectedVersion?: string) {
+    const { id, memo, teacherFeedback, observedAt, originalObservedAt, correctedAt, status, version, updatedAt } = observation;
+    setItems((current) => current.map((entry) => {
+      if (entry.id !== id || entry.version !== expectedVersion) return entry;
+      return { ...entry, memo, teacherFeedback, observedAt, originalObservedAt, correctedAt, status, version, updatedAt, correctedObservedAt: correctedAt ? observedAt : null };
+    }));
+  }
+
+  async function checkSpreadsheet() {
+    if (checkingSpreadsheet) return;
+    setCheckingSpreadsheet(true);
+    setSpreadsheetMessage("");
+    try {
+      const response = await fetch("/api/admin/spreadsheet", { method: "POST", credentials: "same-origin" });
+      const result = (await response.json().catch(() => ({}))) as { ok?: boolean; message?: string };
+      if (!response.ok || result.ok !== true) throw new Error(result.message || "시트 연결을 점검하지 못했습니다.");
+      setSpreadsheetMessage("시트 연결 점검을 완료했습니다.");
+    } catch (error) {
+      setSpreadsheetMessage(error instanceof Error ? error.message : "시트 연결을 점검하지 못했습니다.");
+    } finally {
+      setCheckingSpreadsheet(false);
+    }
   }
 
   function applyHeartState(id: string, heartCount: number, hearted: boolean) {
@@ -643,26 +678,19 @@ export default function AdminPage() {
         method: "PATCH",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ observedAt: editObservedAt, reason: editReason }),
+        body: JSON.stringify({ observedAt: editObservedAt, reason: editReason, version: item.version }),
       });
-      const result = (await response.json().catch(() => ({}))) as {
-        observedAt?: string;
-        originalObservedAt?: string;
-        correctedAt?: string;
-        message?: string;
-      };
+      const result = (await response.json().catch(() => ({}))) as ObservationSaveResult;
+      if (response.status === 409) return setMessage(SAVE_CONFLICT_MESSAGE);
       if (!response.ok) return setMessage(result.message || "관찰 시각을 정정하지 못했습니다.");
-      setItems((current) => current.map((entry) => entry.id === item.id ? {
-        ...entry,
-        observedAt: result.observedAt || editObservedAt,
-        originalObservedAt: result.originalObservedAt || entry.originalObservedAt,
-        correctedObservedAt: result.observedAt || editObservedAt,
-        correctedAt: result.correctedAt || new Date().toISOString(),
-      } : entry));
+      if (result.observation?.id !== item.id) return setMessage("관찰 시각 정정 확인을 받지 못했습니다.");
+      applyObservation(result.observation, item.version);
       setEditingObservationId(null);
       setEditObservedAt("");
       setEditReason("");
       setMessage(`${item.studentNumber}번 학생의 관찰 시각을 정정했습니다. 최초 학생 입력값과 정정 이력은 Google Sheets에 보존됩니다.`);
+    } catch {
+      setMessage("관찰 시각을 정정하지 못했습니다.");
     } finally {
       setSavingObservationId(null);
     }
@@ -746,6 +774,7 @@ export default function AdminPage() {
             <p className="mt-1 text-xs text-slate-500">{invite?.googleDisplayName} {invite?.googleEmail ? `· ${invite.googleEmail}` : ""}</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void checkSpreadsheet()} disabled={checkingSpreadsheet} className="rounded-xl border border-space-600 bg-space-800 px-4 py-2 text-sm font-bold disabled:opacity-50">{checkingSpreadsheet ? "시트 점검 중…" : "시트 연결 점검"}</button>
             <Link href="/" className="rounded-xl border border-space-600 bg-space-800 px-4 py-2 text-sm font-bold">학생 화면</Link>
             <span className="flex items-center gap-1">
               <button
@@ -769,6 +798,7 @@ export default function AdminPage() {
             </span>
           </div>
         </header>
+        {spreadsheetMessage ? <p role="status" className="rounded-xl border border-amber-400/25 bg-amber-400/5 px-4 py-3 text-sm font-bold text-amber-100">{spreadsheetMessage}</p> : null}
 
         {message ? <p className="rounded-xl border border-blue-400/25 bg-blue-400/10 p-3 text-sm text-blue-100" role="status">{message}</p> : null}
         {invite?.regionSettingsRequired ? (
@@ -972,7 +1002,7 @@ export default function AdminPage() {
                     })()}
                   </div>
                   {item.memo ? <p className="mt-3 rounded-xl bg-space-900 p-3 text-sm leading-6 text-slate-300">{item.memo}</p> : null}
-                  <TeacherFeedbackEditor item={item} onSaved={applyTeacherFeedback} />
+                  <TeacherFeedbackEditor item={item} onSaved={applyObservation} />
                   <HeartControl item={item} onChanged={applyHeartState} />
                   {editingObservationId === item.id ? (
                     <form onSubmit={(event) => void saveObservedAtCorrection(event, item)} className="mt-3 space-y-3 rounded-xl border border-amber-400/25 bg-amber-400/5 p-3">

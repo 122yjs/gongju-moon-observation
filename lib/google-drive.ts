@@ -3,9 +3,12 @@ import {
   TeacherConnection,
   revealAccessToken,
   revealRefreshToken,
+  updateTeacherSheetSchema,
+  updateTeacherSheetTitle,
   updateTeacherAccessToken,
 } from "./tenant";
 import { requireOAuthConfig } from "./tenant";
+import { getEnv } from "./runtime";
 
 export const DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
@@ -18,6 +21,7 @@ const SPREADSHEET_MIME = "application/vnd.google-apps.spreadsheet";
 const MAX_SHEET_ROWS = 2000;
 const SUMMARY_SHEET_TITLE = "제출 목록";
 const SUMMARY_PROTECTION_DESCRIPTION = "앱이 자동으로 관리하는 읽기 전용 제출 목록";
+export const SHEET_SCHEMA_VERSION = 2;
 
 interface OAuthTokenResponse {
   access_token: string;
@@ -80,6 +84,12 @@ interface BatchUpdateSpreadsheetResponse {
   }>;
 }
 
+interface AppendResponse {
+  updates?: {
+    updatedRange?: string;
+  };
+}
+
 interface ValueRange {
   values?: unknown[][];
 }
@@ -96,6 +106,8 @@ export interface TeacherDriveResources {
   spreadsheetId: string;
   sheetId: number;
   sheetTitle: string;
+  summarySheetId: number;
+  sheetSchemaVersion: number;
 }
 
 export interface DriveObservation {
@@ -121,6 +133,7 @@ export interface DriveObservation {
   imageBytes: number;
   status: "visible" | "hidden";
   createdAt: string;
+  updatedAt: string;
   imageWebViewUrl: string;
   rowNumber: number;
 }
@@ -130,6 +143,243 @@ export interface ObservationPage {
   total: number;
   hasMore: boolean;
   nextCursor: { createdAt: string; id: string } | null;
+}
+
+async function upsertObservationIndex(
+  teacher: Pick<TeacherConnection, "id" | "spreadsheetId">,
+  observationId: string,
+  rowNumber: number,
+) {
+  await getEnv().DB.prepare(
+    `INSERT INTO observation_row_index (teacher_id, spreadsheet_id, observation_id, row_number, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(teacher_id, observation_id) DO UPDATE SET
+       spreadsheet_id = excluded.spreadsheet_id,
+       row_number = excluded.row_number,
+       updated_at = excluded.updated_at`,
+  )
+    .bind(teacher.id, teacher.spreadsheetId, observationId, rowNumber, new Date().toISOString())
+    .run();
+}
+
+async function deleteObservationIndex(teacherId: string, observationId: string) {
+  await getEnv().DB.prepare(
+    "DELETE FROM observation_row_index WHERE teacher_id = ? AND observation_id = ?",
+  )
+    .bind(teacherId, observationId)
+    .run();
+}
+
+async function clearObservationIndexes(teacherId: string) {
+  await getEnv().DB.prepare("DELETE FROM observation_row_index WHERE teacher_id = ?")
+    .bind(teacherId)
+    .run();
+}
+
+async function getObservationIndex(teacherId: string, observationId: string) {
+  const row = await getEnv().DB.prepare(
+    `SELECT row_number
+       FROM observation_row_index
+      WHERE teacher_id = ? AND observation_id = ?
+      LIMIT 1`,
+  )
+    .bind(teacherId, observationId)
+    .first<{ row_number: number }>();
+  return Number(row?.row_number || 0) || null;
+}
+
+type SheetWriteOperation =
+  | "append"
+  | "update-status"
+  | "update-observed-at"
+  | "update-feedback"
+  | "delete-observation"
+  | "schema"
+  | "delete-class"
+  | "disconnect";
+
+interface SheetWriteIntent {
+  operation: SheetWriteOperation;
+  observationId?: string | null;
+  expectedVersion?: string | null;
+  intendedVersion?: string | null;
+}
+
+interface SheetWriteLockRow {
+  spreadsheet_id: string;
+  teacher_id: string | null;
+  owner_token: string;
+  operation: SheetWriteOperation;
+  observation_id: string | null;
+  expected_version: string | null;
+  intended_version: string | null;
+  state: "active" | "uncertain";
+}
+
+export interface SheetWriteGuard {
+  setVersions(expectedVersion: string | null, intendedVersion: string | null): Promise<void>;
+  writeGoogle<T>(action: () => Promise<T>): Promise<T>;
+}
+
+export class SheetWriteUncertainError extends HttpError {
+  readonly sheetWriteUncertain = true;
+
+  constructor() {
+    super(503, "Google Sheets 변경 결과를 확인할 수 없습니다. 시트 연결 점검으로 상태를 확인해 주세요.");
+  }
+}
+
+export function isSheetWriteUncertainError(error: unknown): error is SheetWriteUncertainError {
+  return error instanceof SheetWriteUncertainError
+    || (typeof error === "object" && error !== null && "sheetWriteUncertain" in error);
+}
+
+async function readSheetWriteLock(spreadsheetId: string) {
+  return getEnv().DB.prepare(
+    `SELECT spreadsheet_id, teacher_id, owner_token, operation, observation_id,
+            expected_version, intended_version, state
+       FROM sheet_write_locks
+      WHERE spreadsheet_id = ?
+      LIMIT 1`,
+  )
+    .bind(spreadsheetId)
+    .first<SheetWriteLockRow>();
+}
+
+async function releaseSheetWriteLock(spreadsheetId: string, ownerToken: string) {
+  await getEnv().DB.prepare(
+    "DELETE FROM sheet_write_locks WHERE spreadsheet_id = ? AND owner_token = ?",
+  )
+    .bind(spreadsheetId, ownerToken)
+    .run();
+}
+
+export async function withSheetWriteLock<T>(
+  teacher: Pick<TeacherConnection, "id" | "spreadsheetId">,
+  intent: SheetWriteIntent,
+  action: (guard: SheetWriteGuard) => Promise<T>,
+) {
+  const ownerToken = crypto.randomUUID();
+  await getEnv().DB.prepare(
+    `INSERT INTO sheet_write_locks (
+       spreadsheet_id, teacher_id, owner_token, operation, observation_id,
+       expected_version, intended_version, state, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)
+     ON CONFLICT(spreadsheet_id) DO NOTHING`,
+  )
+    .bind(
+      teacher.spreadsheetId,
+      teacher.id || null,
+      ownerToken,
+      intent.operation,
+      intent.observationId || null,
+      intent.expectedVersion || null,
+      intent.intendedVersion || null,
+      new Date().toISOString(),
+    )
+    .run();
+  const acquired = await readSheetWriteLock(teacher.spreadsheetId);
+  if (acquired?.owner_token !== ownerToken) {
+    throw new HttpError(409, "Google Sheets 변경을 확인 중입니다. 시트 연결 점검 후 다시 시도해 주세요.");
+  }
+
+  let googleWriteAttempted = false;
+  let uncertain = false;
+  const markUncertain = async () => {
+    // 먼저 메모리에 표시합니다. D1 응답 자체가 끊겨도 finally에서 잠금을 풀면 안 됩니다.
+    uncertain = true;
+    await getEnv().DB.prepare(
+      `UPDATE sheet_write_locks SET state = 'uncertain'
+        WHERE spreadsheet_id = ? AND owner_token = ?`,
+    ).bind(teacher.spreadsheetId, ownerToken).run();
+  };
+  const guard: SheetWriteGuard = {
+    async setVersions(expectedVersion, intendedVersion) {
+      await getEnv().DB.prepare(
+        `UPDATE sheet_write_locks
+            SET expected_version = ?, intended_version = ?
+          WHERE spreadsheet_id = ? AND owner_token = ?`,
+      )
+        .bind(expectedVersion, intendedVersion, teacher.spreadsheetId, ownerToken)
+        .run();
+    },
+    async writeGoogle<TValue>(write: () => Promise<TValue>) {
+      googleWriteAttempted = true;
+      try {
+        return await write();
+      } catch {
+        await markUncertain().catch(() => undefined);
+        throw new SheetWriteUncertainError();
+      }
+    },
+  };
+
+  try {
+    const result = await action(guard);
+    await releaseSheetWriteLock(teacher.spreadsheetId, ownerToken);
+    return result;
+  } catch (error) {
+    // Google 쓰기를 한 번이라도 시작했다면 후속 D1 작업 실패도 보수적으로 불명확 상태로 남깁니다.
+    if (googleWriteAttempted) {
+      if (!uncertain) await markUncertain().catch(() => undefined);
+      if (!isSheetWriteUncertainError(error)) throw new SheetWriteUncertainError();
+    } else {
+      await releaseSheetWriteLock(teacher.spreadsheetId, ownerToken);
+    }
+    throw error;
+  }
+}
+
+export async function withSheetWriteLocks<T>(
+  teachers: Array<Pick<TeacherConnection, "id" | "spreadsheetId">>,
+  operation: "delete-class" | "disconnect",
+  action: (guards: SheetWriteGuard[]) => Promise<T>,
+) {
+  const ordered = [...teachers].sort((left, right) => left.spreadsheetId.localeCompare(right.spreadsheetId));
+  const guards: SheetWriteGuard[] = [];
+  const acquire = (index: number): Promise<T> => {
+    if (index >= ordered.length) return action(guards);
+    return withSheetWriteLock(ordered[index], { operation }, async (guard) => {
+      guards.push(guard);
+      try {
+        return await acquire(index + 1);
+      } finally {
+        guards.pop();
+      }
+    });
+  };
+  return acquire(0);
+}
+
+export async function observationVersion(observation: DriveObservation) {
+  const content = JSON.stringify([
+    observation.id,
+    observation.memo,
+    observation.teacherFeedback,
+    observation.observedAt,
+    observation.originalObservedAt || observation.observedAt,
+    observation.correctedAt || "",
+    observation.correctionHistory || "",
+    observation.status,
+    observation.createdAt,
+    observation.updatedAt || observation.correctedAt || observation.createdAt,
+  ]);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(content));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export async function observationSummary(observation: DriveObservation, updatedAt?: string) {
+  return {
+    id: observation.id,
+    memo: observation.memo,
+    teacherFeedback: observation.teacherFeedback,
+    observedAt: observation.observedAt,
+    originalObservedAt: observation.originalObservedAt || observation.observedAt,
+    correctedAt: observation.correctedAt || null,
+    status: observation.status,
+    updatedAt: updatedAt || observation.updatedAt,
+    version: await observationVersion(observation),
+  };
 }
 
 function redirectUri(origin: string) {
@@ -307,25 +557,49 @@ async function updateSheetValues(
   range: string,
   values: unknown[][],
   valueInputOption: "RAW" | "USER_ENTERED" = "RAW",
+  guard?: SheetWriteGuard,
 ) {
   const query = new URLSearchParams({ valueInputOption });
-  await googleJson(
+  const write = () => googleJson(
     `${SHEETS_API}/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}?${query}`,
     accessToken,
     { method: "PUT", body: JSON.stringify({ range, majorDimension: "ROWS", values }) },
   );
+  await (guard ? guard.writeGoogle(write) : write());
+}
+
+async function updateSheetRanges(
+  accessToken: string,
+  spreadsheetId: string,
+  data: Array<{ range: string; values: unknown[][] }>,
+  guard?: SheetWriteGuard,
+) {
+  const write = () => googleJson(
+    `${SHEETS_API}/spreadsheets/${encodeURIComponent(spreadsheetId)}/values:batchUpdate`,
+    accessToken,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        valueInputOption: "RAW",
+        data: data.map((item) => ({ ...item, majorDimension: "ROWS" })),
+      }),
+    },
+  );
+  await (guard ? guard.writeGoogle(write) : write());
 }
 
 async function batchUpdateSpreadsheet(
   accessToken: string,
   spreadsheetId: string,
   requests: unknown[],
+  guard?: SheetWriteGuard,
 ) {
-  return googleJson<BatchUpdateSpreadsheetResponse>(
+  const write = () => googleJson<BatchUpdateSpreadsheetResponse>(
     `${SHEETS_API}/spreadsheets/${encodeURIComponent(spreadsheetId)}:batchUpdate`,
     accessToken,
     { method: "POST", body: JSON.stringify({ requests }) },
   );
+  return guard ? guard.writeGoogle(write) : write();
 }
 
 async function renameAndFormatSheet(
@@ -333,8 +607,9 @@ async function renameAndFormatSheet(
   spreadsheetId: string,
   sheetId: number,
   title: string,
+  guard?: SheetWriteGuard,
 ) {
-  await googleJson(
+  const write = () => googleJson(
     `${SHEETS_API}/spreadsheets/${encodeURIComponent(spreadsheetId)}:batchUpdate`,
     accessToken,
     {
@@ -358,6 +633,7 @@ async function renameAndFormatSheet(
       }),
     },
   );
+  await (guard ? guard.writeGoogle(write) : write());
 }
 
 function summaryFormula(rawSheetTitle: string) {
@@ -386,13 +662,15 @@ const OBSERVATION_HEADERS = [
   "관찰 시각 정정 이력",
   "사진 촬영 시각 (기기 기록)",
   "교사 피드백",
+  "최근 수정 시각 (UTC)",
 ];
 
 async function ensureObservationHeaders(
   accessToken: string,
   teacher: Pick<TeacherDriveResources, "spreadsheetId" | "sheetTitle">,
+  guard?: SheetWriteGuard,
 ) {
-  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A1:R1`;
+  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A1:S1`;
   const current = await googleJson<ValueRange>(
     `${SHEETS_API}/spreadsheets/${encodeURIComponent(teacher.spreadsheetId)}/values/${encodeURIComponent(range)}?${new URLSearchParams({ majorDimension: "ROWS", valueRenderOption: "UNFORMATTED_VALUE" })}`,
     accessToken,
@@ -405,15 +683,17 @@ async function ensureObservationHeaders(
     teacher.spreadsheetId,
     range,
     [OBSERVATION_HEADERS],
+    "RAW",
+    guard,
   );
   return true;
 }
 
-export async function ensureTeacherSummarySheet(
+async function ensureTeacherSummarySheetUnlocked(
   accessToken: string,
-  teacher: Pick<TeacherDriveResources, "spreadsheetId" | "sheetId" | "sheetTitle">,
+  teacher: Pick<TeacherDriveResources, "spreadsheetId" | "sheetId" | "sheetTitle"> & { id?: string },
+  guard: SheetWriteGuard,
 ) {
-  const rawHeadersChanged = await ensureObservationHeaders(accessToken, teacher);
   const fields = [
     "properties(timeZone)",
     "sheets(properties(sheetId,title,index,hidden,gridProperties(rowCount,columnCount,frozenRowCount)),protectedRanges(protectedRangeId,description,warningOnly,range(sheetId)))",
@@ -428,6 +708,12 @@ export async function ensureTeacherSummarySheet(
   if (!rawSheet?.properties?.title) {
     throw new HttpError(502, "Google Sheets 원본 기록 탭을 찾지 못했습니다.");
   }
+  const actualSheetTitle = rawSheet.properties.title;
+  if (teacher.id && actualSheetTitle !== teacher.sheetTitle) {
+    await updateTeacherSheetTitle(teacher.id, actualSheetTitle);
+  }
+  const currentTeacher = { ...teacher, sheetTitle: actualSheetTitle };
+  const rawHeadersChanged = await ensureObservationHeaders(accessToken, currentTeacher, guard);
 
   let summarySheet = metadata.sheets?.find(
     (sheet) => sheet.properties?.title === SUMMARY_SHEET_TITLE,
@@ -490,6 +776,7 @@ export async function ensureTeacherSummarySheet(
       accessToken,
       teacher.spreadsheetId,
       setupRequests,
+      guard,
     );
     if (summarySheet?.properties?.sheetId == null) {
       const added = result.replies?.find((reply) => reply.addSheet)?.addSheet?.properties;
@@ -537,6 +824,8 @@ export async function ensureTeacherSummarySheet(
       teacher.spreadsheetId,
       `${summaryTitle}!A1:I1`,
       [summaryHeaders],
+      "RAW",
+      guard,
     );
   }
   if (formulaChanged) {
@@ -546,6 +835,7 @@ export async function ensureTeacherSummarySheet(
       `${summaryTitle}!A2`,
       [[formula]],
       "USER_ENTERED",
+      guard,
     );
   }
 
@@ -598,9 +888,23 @@ export async function ensureTeacherSummarySheet(
     formatRequests.push({ addProtectedRange: { protectedRange: protectedRangeSettings } });
   }
   if (rawHeadersChanged || setupRequests.length > 0 || summaryHeadersChanged || formulaChanged || !protectedRange) {
-    await batchUpdateSpreadsheet(accessToken, teacher.spreadsheetId, formatRequests);
+    await batchUpdateSpreadsheet(accessToken, teacher.spreadsheetId, formatRequests, guard);
+  }
+  if (teacher.id) {
+    await updateTeacherSheetSchema(teacher.id, actualSheetTitle, summarySheetId, SHEET_SCHEMA_VERSION);
   }
   return summarySheetId;
+}
+
+export async function ensureTeacherSummarySheet(
+  accessToken: string,
+  teacher: Pick<TeacherDriveResources, "spreadsheetId" | "sheetId" | "sheetTitle"> & { id?: string },
+) {
+  return withSheetWriteLock(
+    { id: teacher.id || "", spreadsheetId: teacher.spreadsheetId },
+    { operation: "schema" },
+    (guard) => ensureTeacherSummarySheetUnlocked(accessToken, teacher, guard),
+  );
 }
 
 export async function initializeTeacherDrive(
@@ -631,14 +935,18 @@ export async function initializeTeacherDrive(
   }
   const sheetId = Number(first?.sheetId);
   const sheetTitle = "관찰 기록";
-  await renameAndFormatSheet(accessToken, spreadsheet.id, sheetId, sheetTitle);
-  await ensureObservationHeaders(accessToken, { spreadsheetId: spreadsheet.id, sheetTitle });
-
-  await ensureTeacherSummarySheet(accessToken, {
-    spreadsheetId: spreadsheet.id,
-    sheetId,
-    sheetTitle,
-  });
+  const summarySheetId = await withSheetWriteLock(
+    { id: "", spreadsheetId: spreadsheet.id },
+    { operation: "schema" },
+    async (guard) => {
+      await renameAndFormatSheet(accessToken, spreadsheet.id, sheetId, sheetTitle, guard);
+      return ensureTeacherSummarySheetUnlocked(accessToken, {
+        spreadsheetId: spreadsheet.id,
+        sheetId,
+        sheetTitle,
+      }, guard);
+    },
+  );
 
   return {
     rootFolderId,
@@ -646,6 +954,8 @@ export async function initializeTeacherDrive(
     spreadsheetId: spreadsheet.id,
     sheetId,
     sheetTitle,
+    summarySheetId,
+    sheetSchemaVersion: SHEET_SCHEMA_VERSION,
   };
 }
 
@@ -716,40 +1026,59 @@ export async function appendObservationRow(
   teacher: TeacherConnection,
   observation: Omit<DriveObservation, "rowNumber">,
 ) {
-  // Feedback lives in column R, which new submissions intentionally leave empty.
-  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A:Q`;
+  // 교사 피드백은 R열에, 새로고침 뒤에도 유지할 마지막 수정 시각은 S열에 저장합니다.
+  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A:S`;
   const query = new URLSearchParams({
     valueInputOption: "RAW",
     insertDataOption: "INSERT_ROWS",
+    includeValuesInResponse: "false",
+    fields: "updates(updatedRange)",
   });
-  await googleJson(
-    `${SHEETS_API}/spreadsheets/${encodeURIComponent(teacher.spreadsheetId)}/values/${encodeURIComponent(range)}:append?${query}`,
-    accessToken,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        range,
-        majorDimension: "ROWS",
-        values: [[
-          observation.id,
-          observation.requestId,
-          observation.classLabel,
-          observation.studentNumber,
-          observation.studentName,
-          observation.observedAt,
-          observation.memo,
-          observation.imageFileId,
-          observation.imageType,
-          observation.imageBytes,
-          observation.status,
-          observation.createdAt,
-          observation.imageWebViewUrl,
-          "",
-          "",
-          "",
-          observation.photoCapturedAt || "",
-        ]],
-      }),
+  const intendedVersion = await observationVersion({ ...observation, rowNumber: 0 });
+  await withSheetWriteLock(
+    teacher,
+    { operation: "append", observationId: observation.id, intendedVersion },
+    async (guard) => {
+      await guard.setVersions(null, intendedVersion);
+      const response = await guard.writeGoogle(() => googleJson<AppendResponse>(
+        `${SHEETS_API}/spreadsheets/${encodeURIComponent(teacher.spreadsheetId)}/values/${encodeURIComponent(range)}:append?${query}`,
+        accessToken,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            range,
+            majorDimension: "ROWS",
+            values: [[
+              observation.id,
+              observation.requestId,
+              observation.classLabel,
+              observation.studentNumber,
+              observation.studentName,
+              observation.observedAt,
+              observation.memo,
+              observation.imageFileId,
+              observation.imageType,
+              observation.imageBytes,
+              observation.status,
+              observation.createdAt,
+              observation.imageWebViewUrl,
+              "",
+              "",
+              "",
+              observation.photoCapturedAt || "",
+              observation.teacherFeedback,
+              observation.updatedAt,
+            ]],
+          }),
+        },
+      ));
+      const match = /!(?:[A-Z]+)(\d+)(?::|$)/.exec(response.updates?.updatedRange || "");
+      if (match) {
+        await upsertObservationIndex(teacher, observation.id, Number(match[1])).catch((error) => {
+          // Sheets 저장은 이미 끝났습니다. 색인은 다음 단건 조회에서 복구할 수 있습니다.
+          console.warn("관찰 기록 행 색인을 저장하지 못했습니다.", error);
+        });
+      }
     },
   );
 }
@@ -787,13 +1116,14 @@ function parseObservation(row: unknown[], rowNumber: number): DriveObservation |
     imageBytes: Number.isFinite(imageBytes) ? imageBytes : 0,
     status: statusText === "hidden" ? "hidden" : "visible",
     createdAt: cell(row, 11),
+    updatedAt: cell(row, 18) || cell(row, 14) || cell(row, 11),
     imageWebViewUrl: cell(row, 12),
     rowNumber,
   };
 }
 
 async function readObservationRows(accessToken: string, teacher: TeacherConnection) {
-  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A2:R${MAX_SHEET_ROWS + 1}`;
+  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A2:S${MAX_SHEET_ROWS + 1}`;
   const query = new URLSearchParams({ majorDimension: "ROWS", valueRenderOption: "UNFORMATTED_VALUE" });
   const response = await googleJson<ValueRange>(
     `${SHEETS_API}/spreadsheets/${encodeURIComponent(teacher.spreadsheetId)}/values/${encodeURIComponent(range)}?${query}`,
@@ -802,6 +1132,43 @@ async function readObservationRows(accessToken: string, teacher: TeacherConnecti
   return (response.values || [])
     .map((row, index) => parseObservation(row, index + 2))
     .filter((item): item is DriveObservation => Boolean(item));
+}
+
+async function readObservationRowAt(
+  accessToken: string,
+  teacher: TeacherConnection,
+  rowNumber: number,
+) {
+  if (!Number.isInteger(rowNumber) || rowNumber < 2) return null;
+  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A${rowNumber}:S${rowNumber}`;
+  const query = new URLSearchParams({ majorDimension: "ROWS", valueRenderOption: "UNFORMATTED_VALUE" });
+  let response: ValueRange;
+  try {
+    response = await googleJson<ValueRange>(
+      `${SHEETS_API}/spreadsheets/${encodeURIComponent(teacher.spreadsheetId)}/values/${encodeURIComponent(range)}?${query}`,
+      accessToken,
+    );
+  } catch (error) {
+    if (error instanceof HttpError && (error.status === 400 || error.status === 404)) return null;
+    throw error;
+  }
+  const row = response.values?.[0];
+  return row ? parseObservation(row, rowNumber) : null;
+}
+
+async function findObservationRowNumber(
+  accessToken: string,
+  teacher: TeacherConnection,
+  observationId: string,
+) {
+  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A2:A`;
+  const query = new URLSearchParams({ majorDimension: "ROWS", valueRenderOption: "UNFORMATTED_VALUE" });
+  const response = await googleJson<ValueRange>(
+    `${SHEETS_API}/spreadsheets/${encodeURIComponent(teacher.spreadsheetId)}/values/${encodeURIComponent(range)}?${query}`,
+    accessToken,
+  );
+  const index = (response.values || []).findIndex((row) => cell(row, 0) === observationId);
+  return index < 0 ? null : index + 2;
 }
 
 function compareObservation(left: DriveObservation, right: DriveObservation) {
@@ -848,7 +1215,61 @@ export async function findObservationRow(
   teacher: TeacherConnection,
   observationId: string,
 ) {
-  return (await readObservationRows(accessToken, teacher)).find((row) => row.id === observationId) || null;
+  const cachedRowNumber = await getObservationIndex(teacher.id, observationId);
+  if (cachedRowNumber) {
+    const cached = await readObservationRowAt(accessToken, teacher, cachedRowNumber);
+    if (cached?.id === observationId) return cached;
+  }
+
+  // 단건 복구는 ID 열만 끝까지 읽습니다. 목록의 2,000행 상한 때문에 오래된 행을 놓치면 안 됩니다.
+  let found: DriveObservation | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const recoveredRowNumber = await findObservationRowNumber(accessToken, teacher, observationId);
+    if (!recoveredRowNumber) break;
+    const candidate = await readObservationRowAt(accessToken, teacher, recoveredRowNumber);
+    if (candidate?.id === observationId) {
+      found = candidate;
+      break;
+    }
+    if (attempt === 1) {
+      throw new HttpError(409, "관찰 기록 행이 이동했습니다. 다시 시도해 주세요.");
+    }
+  }
+  if (found) {
+    await upsertObservationIndex(teacher, observationId, found.rowNumber);
+  } else {
+    await deleteObservationIndex(teacher.id, observationId);
+  }
+  return found;
+}
+
+export async function recoverSheetWriteLock(accessToken: string, teacher: TeacherConnection) {
+  const lock = await readSheetWriteLock(teacher.spreadsheetId);
+  if (!lock) return { recovered: false as const };
+
+  if (lock.state === "active") {
+    // 실행 중 요청과 프로세스 중단을 D1만으로 구별할 수 없으므로 자동 해제하지 않습니다.
+    throw new HttpError(409, "시트 변경 요청이 진행 중이거나 비정상 종료되었습니다. 운영자 확인이 필요합니다.");
+  }
+
+  if (lock.observation_id) {
+    const current = await findObservationRow(accessToken, teacher, lock.observation_id);
+    const actualVersion = current ? await observationVersion(current) : null;
+    const applied = lock.operation === "delete-observation"
+      ? current === null
+      : actualVersion !== null && actualVersion === lock.intended_version;
+    if (!applied) {
+      throw new HttpError(409, "시트에서 변경 완료를 확인하지 못했습니다. 지연 적용 가능성이 있어 운영자 확인이 필요합니다.");
+    }
+    if (lock.operation === "delete-observation" && applied) {
+      await clearObservationIndexes(teacher.id);
+    }
+    await releaseSheetWriteLock(teacher.spreadsheetId, lock.owner_token);
+    return { recovered: true as const, operation: lock.operation, outcome: "applied" as const };
+  }
+
+  // 구조 변경과 학급 정리는 여러 Google 요청으로 이루어져 부분 적용 여부를 한 값으로 증명할 수 없습니다.
+  throw new HttpError(409, "여러 단계의 Google Drive 변경이 중단되었습니다. 운영자 확인이 필요합니다.");
 }
 
 export async function updateObservationStatus(
@@ -856,13 +1277,21 @@ export async function updateObservationStatus(
   teacher: TeacherConnection,
   observation: DriveObservation,
   status: "visible" | "hidden",
+  guard?: SheetWriteGuard,
+  updateTimestamp = new Date().toISOString(),
 ) {
-  await updateSheetValues(
+  const updatedAt = updateTimestamp;
+  await updateSheetRanges(
     accessToken,
     teacher.spreadsheetId,
-    `${quoteSheetTitle(teacher.sheetTitle)}!K${observation.rowNumber}`,
-    [[status]],
+    [
+      { range: `${quoteSheetTitle(teacher.sheetTitle)}!K${observation.rowNumber}`, values: [[status]] },
+      { range: `${quoteSheetTitle(teacher.sheetTitle)}!S${observation.rowNumber}`, values: [[updatedAt]] },
+    ],
+    guard,
   );
+  await upsertObservationIndex(teacher, observation.id, observation.rowNumber).catch(() => undefined);
+  return { status, updatedAt };
 }
 
 export async function updateObservationObservedAt(
@@ -871,21 +1300,40 @@ export async function updateObservationObservedAt(
   observation: DriveObservation,
   observedAt: string,
   reason: string,
+  guard?: SheetWriteGuard,
+  updateTimestamp = new Date().toISOString(),
 ) {
-  const correctedAt = new Date().toISOString();
-  const previous = observation.observedAt;
-  const cleanReason = reason.replace(/[\r\n\t]+/g, " ").trim();
-  const historyLine = `${correctedAt} | ${previous} → ${observedAt} | ${cleanReason}`;
-  const correctionHistory = observation.correctionHistory
-    ? `${observation.correctionHistory}\n${historyLine}`
-    : historyLine;
-  await updateSheetValues(
+  const correctedAt = updateTimestamp;
+  const { correctionHistory } = buildObservedAtCorrection(observation, observedAt, reason, correctedAt);
+  const updatedAt = correctedAt;
+  await updateSheetRanges(
     accessToken,
     teacher.spreadsheetId,
-    `${quoteSheetTitle(teacher.sheetTitle)}!N${observation.rowNumber}:P${observation.rowNumber}`,
-    [[observedAt, correctedAt, correctionHistory]],
+    [
+      {
+        range: `${quoteSheetTitle(teacher.sheetTitle)}!N${observation.rowNumber}:P${observation.rowNumber}`,
+        values: [[observedAt, correctedAt, correctionHistory]],
+      },
+      { range: `${quoteSheetTitle(teacher.sheetTitle)}!S${observation.rowNumber}`, values: [[updatedAt]] },
+    ],
+    guard,
   );
-  return { observedAt, correctedAt, correctionHistory };
+  return { observedAt, correctedAt, correctionHistory, updatedAt };
+}
+
+export function buildObservedAtCorrection(
+  observation: DriveObservation,
+  observedAt: string,
+  reason: string,
+  correctedAt: string,
+) {
+  const cleanReason = reason.replace(/[\r\n\t]+/g, " ").trim();
+  const historyLine = `${correctedAt} | ${observation.observedAt} → ${observedAt} | ${cleanReason}`;
+  return {
+    correctionHistory: observation.correctionHistory
+      ? `${observation.correctionHistory}\n${historyLine}`
+      : historyLine,
+  };
 }
 
 export async function updateObservationFeedback(
@@ -893,23 +1341,32 @@ export async function updateObservationFeedback(
   teacher: TeacherConnection,
   observation: DriveObservation,
   teacherFeedback: string,
+  guard?: SheetWriteGuard,
+  updateTimestamp = new Date().toISOString(),
 ) {
+  const updatedAt = updateTimestamp;
   await updateSheetValues(
     accessToken,
     teacher.spreadsheetId,
-    `${quoteSheetTitle(teacher.sheetTitle)}!R${observation.rowNumber}`,
-    [[teacherFeedback]],
+    `${quoteSheetTitle(teacher.sheetTitle)}!R${observation.rowNumber}:S${observation.rowNumber}`,
+    [[teacherFeedback, updatedAt]],
+    "RAW",
+    guard,
   );
+  await upsertObservationIndex(teacher, observation.id, observation.rowNumber).catch(() => undefined);
+  return { teacherFeedback, updatedAt };
 }
 
 export async function deleteObservation(
   accessToken: string,
   teacher: TeacherConnection,
   observation: DriveObservation,
+  guard?: SheetWriteGuard,
 ) {
-  await updateObservationStatus(accessToken, teacher, observation, "hidden");
-  await deleteDriveFile(accessToken, observation.imageFileId);
-  await googleJson(
+  await updateObservationStatus(accessToken, teacher, observation, "hidden", guard);
+  const deletePhoto = () => deleteDriveFile(accessToken, observation.imageFileId);
+  await (guard ? guard.writeGoogle(deletePhoto) : deletePhoto());
+  const deleteRow = () => googleJson(
     `${SHEETS_API}/spreadsheets/${encodeURIComponent(teacher.spreadsheetId)}:batchUpdate`,
     accessToken,
     {
@@ -930,6 +1387,10 @@ export async function deleteObservation(
       }),
     },
   );
+  await (guard ? guard.writeGoogle(deleteRow) : deleteRow());
+  await deleteObservationIndex(teacher.id, observation.id);
+  // 행 삭제는 아래 모든 행 번호를 바꾸므로 시트 단위로 색인만 비웁니다.
+  await clearObservationIndexes(teacher.id);
 }
 
 export async function downloadObservationImage(

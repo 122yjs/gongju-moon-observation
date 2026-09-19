@@ -76,6 +76,8 @@ export const teacherConnections = sqliteTable(
     spreadsheetId: text("spreadsheet_id").notNull(),
     sheetId: integer("sheet_id").notNull(),
     sheetTitle: text("sheet_title").notNull(),
+    summarySheetId: integer("summary_sheet_id"),
+    sheetSchemaVersion: integer("sheet_schema_version").notNull().default(0),
     inviteTokenHash: text("invite_token_hash").notNull(),
     inviteTokenCiphertext: text("invite_token_ciphertext").notNull(),
     classLabel: text("class_label").notNull(),
@@ -87,6 +89,33 @@ export const teacherConnections = sqliteTable(
     uniqueIndex("teacher_connections_invite_hash_unique").on(table.inviteTokenHash),
   ],
 );
+
+export const observationRowIndex = sqliteTable(
+  "observation_row_index",
+  {
+    teacherId: text("teacher_id").notNull().references(() => teacherConnections.id, { onDelete: "cascade" }),
+    spreadsheetId: text("spreadsheet_id").notNull(),
+    observationId: text("observation_id").notNull(),
+    rowNumber: integer("row_number").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.teacherId, table.observationId] }),
+    index("observation_row_index_sheet_idx").on(table.spreadsheetId),
+  ],
+);
+
+export const sheetWriteLocks = sqliteTable("sheet_write_locks", {
+  spreadsheetId: text("spreadsheet_id").primaryKey(),
+  teacherId: text("teacher_id"),
+  ownerToken: text("owner_token").notNull(),
+  operation: text("operation").notNull(),
+  observationId: text("observation_id"),
+  expectedVersion: text("expected_version"),
+  intendedVersion: text("intended_version"),
+  state: text("state").notNull().default("active"),
+  createdAt: text("created_at").notNull(),
+});
 
 export const submissionReceipts = sqliteTable(
   "submission_receipts",
