@@ -576,6 +576,8 @@
     let galleryLoaded = false;
     let galleryObservedDate = '';
     let galleryStudentNumber = '';
+    let galleryActiveObservedDate = '';
+    let galleryActiveStudentNumber = '';
     let hasClassSession = false;
     let sessionCheckPromise = null;
     let sessionCheckNeedsRetry = false;
@@ -1494,7 +1496,7 @@
         renderSubmitObservationSupport();
         maybeShowLateNightDialog();
       }
-      if (name === 'gallery' && !galleryLoaded) refreshGallery();
+      if (name === 'gallery') refreshGallery();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -2339,48 +2341,55 @@
     }
 
     function refreshGallery() {
-      galleryCursor = null;
       galleryLoaded = false;
-      document.getElementById('photoGallery').replaceChildren();
       return loadGalleryPage(true);
     }
 
     async function loadGalleryPage(replace) {
       const loading = document.getElementById('galleryLoading');
       const moreButton = document.getElementById('loadMoreButton');
+      const requestCursor = replace ? null : galleryCursor;
+      const requestObservedDate = replace ? galleryObservedDate : galleryActiveObservedDate;
+      const requestStudentNumber = replace ? galleryStudentNumber : galleryActiveStudentNumber;
       if (galleryRequestController) galleryRequestController.abort();
       const requestController = new AbortController();
       galleryRequestController = requestController;
       loading.classList.remove('hidden');
-      moreButton.classList.add('hidden');
       moreButton.disabled = true;
 
       try {
         const query = new URLSearchParams({ limit: String(PAGE_SIZE) });
-        if (galleryCursor) query.set('cursor', galleryCursor);
-        if (galleryObservedDate) query.set('observedDate', galleryObservedDate);
-        if (galleryStudentNumber) query.set('studentNumber', galleryStudentNumber);
+        if (requestCursor) query.set('cursor', requestCursor);
+        if (requestObservedDate) query.set('observedDate', requestObservedDate);
+        if (requestStudentNumber) query.set('studentNumber', requestStudentNumber);
         const response = await fetch(`/api/observations?${query}`, {
           credentials: 'same-origin',
           signal: requestController.signal
         });
         const page = await response.json().catch(() => ({}));
+        if (galleryRequestController !== requestController) return;
         if (response.status === 401) {
           hasClassSession = false;
           await checkSession();
         }
+        if (galleryRequestController !== requestController) return;
         if (!response.ok) throw new Error(page.message || '사진을 불러오지 못했습니다.');
         galleryLoaded = true;
-        if (replace) document.getElementById('photoGallery').replaceChildren();
+        if (replace) {
+          document.getElementById('photoGallery').replaceChildren();
+          galleryActiveObservedDate = requestObservedDate;
+          galleryActiveStudentNumber = requestStudentNumber;
+        }
         renderGalleryItems(page.items || []);
         galleryCursor = page.nextCursor || null;
         document.getElementById('galleryCount').textContent = `(${Number(page.total) || 0}개)`;
-        const hasFilters = Boolean(galleryObservedDate || galleryStudentNumber);
+        const hasFilters = Boolean(requestObservedDate || requestStudentNumber);
         document.getElementById('emptyGalleryTitle').textContent = hasFilters ? '조건에 맞는 사진이 없습니다.' : '아직 제출된 사진이 없습니다.';
         document.getElementById('emptyGalleryDescription').textContent = hasFilters ? '날짜나 출석번호를 바꿔 다시 찾아보세요.' : '첫 번째 달 관찰 기록을 남겨 보세요!';
         document.getElementById('emptyGallery').classList.toggle('hidden', Number(page.total) !== 0);
         moreButton.classList.toggle('hidden', !page.hasMore);
       } catch (error) {
+        if (galleryRequestController !== requestController) return;
         if (error && error.name === 'AbortError') return;
         document.getElementById('emptyGallery').classList.remove('hidden');
         document.getElementById('emptyGalleryTitle').textContent = error && error.message ? error.message : '사진을 불러오지 못했습니다.';
