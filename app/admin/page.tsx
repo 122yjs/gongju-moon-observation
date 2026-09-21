@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChangeEvent, FormEvent, useCallback, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 
 interface Observation {
@@ -359,6 +359,7 @@ export default function AdminPage() {
   const [editObservedAt, setEditObservedAt] = useState("");
   const [editReason, setEditReason] = useState("");
   const [savingObservationId, setSavingObservationId] = useState<string | null>(null);
+  const loadRequestId = useRef(0);
 
   const applyGeocodeCandidate = useCallback((candidate: GeocodeCandidate) => {
     setRegionLabel(candidate.label);
@@ -379,42 +380,61 @@ export default function AdminPage() {
   }, []);
 
   const loadData = useCallback(async (nextCursor: string | null = null, append = false) => {
+    const requestId = ++loadRequestId.current;
     setLoading(true);
     try {
       const query = nextCursor ? `?cursor=${encodeURIComponent(nextCursor)}` : "";
-      const [recordsResponse, inviteResponse] = await Promise.all([
+      const [recordsRequest, inviteRequest] = await Promise.allSettled([
         fetch(`/api/admin/observations${query}`, { credentials: "same-origin" }),
         fetch("/api/admin/invite", { credentials: "same-origin" }),
       ]);
-      if (recordsResponse.status === 401 || inviteResponse.status === 401) {
+      if (requestId !== loadRequestId.current) return;
+      const recordsResponse = recordsRequest.status === "fulfilled" ? recordsRequest.value : null;
+      const inviteResponse = inviteRequest.status === "fulfilled" ? inviteRequest.value : null;
+      if (recordsResponse?.status === 401 || inviteResponse?.status === 401) {
         setAuthenticated(false);
         return;
       }
-      const records = (await recordsResponse.json().catch(() => ({}))) as PageResult;
-      const inviteResult = (await inviteResponse.json().catch(() => ({}))) as InviteInfo & { message?: string };
-      if (!recordsResponse.ok) throw new Error(records.message || "관찰 기록을 불러오지 못했습니다.");
-      if (!inviteResponse.ok) throw new Error(inviteResult.message || "수업 링크를 불러오지 못했습니다.");
-      setItems((current) => (append ? [...current, ...records.items] : records.items));
-      setCursor(records.nextCursor);
-      setHasMore(records.hasMore);
-      setInvite(inviteResult);
-      setClassLabel(inviteResult.classLabel);
-      setRegionLabel(inviteResult.regionLabel);
-      setRegionShortLabel(inviteResult.regionShortLabel);
-      setObservationLat(String(inviteResult.observationLat));
-      setObservationLon(String(inviteResult.observationLon));
-      setGeocodeItems([]);
-      setRegionSearchStatus("");
-      setQrClassId((current) =>
-        current && inviteResult.classes.some((teacherClass) => teacherClass.id === current)
-          ? current
-          : inviteResult.activeClassId,
-      );
+      const records = recordsResponse
+        ? (await recordsResponse.json().catch(() => ({}))) as PageResult
+        : {} as PageResult;
+      const inviteResult = inviteResponse
+        ? (await inviteResponse.json().catch(() => ({}))) as InviteInfo & { message?: string }
+        : {} as InviteInfo & { message?: string };
+      if (requestId !== loadRequestId.current) return;
+      if (recordsResponse?.ok) {
+        setItems((current) => (append ? [...current, ...records.items] : records.items));
+        setCursor(records.nextCursor);
+        setHasMore(records.hasMore);
+      }
+      if (inviteResponse?.ok) {
+        setInvite(inviteResult);
+        setClassLabel(inviteResult.classLabel);
+        setRegionLabel(inviteResult.regionLabel);
+        setRegionShortLabel(inviteResult.regionShortLabel);
+        setObservationLat(String(inviteResult.observationLat));
+        setObservationLon(String(inviteResult.observationLon));
+        setGeocodeItems([]);
+        setRegionSearchStatus("");
+        setQrClassId((current) =>
+          current && inviteResult.classes.some((teacherClass) => teacherClass.id === current)
+            ? current
+            : inviteResult.activeClassId,
+        );
+      }
+      if (!recordsResponse?.ok) {
+        throw new Error(records.message || "관찰 기록을 불러오지 못했습니다.");
+      }
+      if (!inviteResponse?.ok) {
+        throw new Error(inviteResult.message || "수업 링크를 불러오지 못했습니다.");
+      }
       setAuthenticated(true);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "자료를 불러오지 못했습니다.");
+      if (requestId === loadRequestId.current) {
+        setMessage(error instanceof Error ? error.message : "자료를 불러오지 못했습니다.");
+      }
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestId.current) setLoading(false);
     }
   }, []);
 
