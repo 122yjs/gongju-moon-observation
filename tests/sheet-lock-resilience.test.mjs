@@ -17,7 +17,8 @@ function load(path, services = {}, globals = {}) {
 }
 
 function harness({ googleStatus = 200, transportFailure = false, verificationFailure = false,
-  insertResponseLost = false, receiptFailure = false } = {}) {
+  insertResponseLost = false, receiptFailure = false, requireColumnA = false,
+  updatedRange = "'관찰'!A2:S2" } = {}) {
   const http = load('../lib/http.ts');
   const teacher = { id: 'class-a', spreadsheetId: 'sheet-a', sheetTitle: '관찰' };
   const observation = {
@@ -73,8 +74,15 @@ function harness({ googleStatus = 200, transportFailure = false, verificationFai
         if (transportFailure) throw new Error('response lost');
         if (googleStatus !== 200) return Response.json({ error: { message: 'synthetic Google rejection' } }, { status: googleStatus });
         const body = JSON.parse(init.body);
-        if (String(url).includes(':append')) stored = body.values;
-        return Response.json({ updates: { updatedRange: "'관찰'!A2:S2" } });
+        if (String(url).includes(':append')) {
+          // 오른쪽 선택 항목에 값이 있어도 표 탐색은 관찰 ID 열에서만 시작해야 합니다.
+          if (requireColumnA) {
+            assert.equal(decodeURIComponent(new URL(url).pathname.split('/values/')[1]), "'관찰'!A:A:append");
+            assert.equal(body.values[0].length, 19);
+          }
+          stored = body.values;
+        }
+        return Response.json({ updates: { updatedRange } });
       }
       const range = decodeURIComponent(new URL(url).pathname.split('/values/')[1] || '');
       return Response.json({ values: range.endsWith('!A2:A') ? stored.map((row) => [row[0]]) : stored });
@@ -98,6 +106,19 @@ function harness({ googleStatus = 200, transportFailure = false, verificationFai
     recover: () => drive.recoverSheetWriteLock('synthetic-token', teacher),
   };
 }
+
+test('새 관찰은 A열을 기준으로 찾고 19개 열을 모두 저장한다', async () => {
+  const h = harness({ requireColumnA: true });
+  await h.append();
+  assert.equal(h.lock(), null);
+});
+
+test('Google이 Q열부터 저장했다고 응답하면 성공 처리하거나 잠금을 풀지 않는다', async () => {
+  const h = harness({ updatedRange: "'관찰'!Q2:AI2" });
+  await assert.rejects(h.append(), error => h.drive.isSheetWriteUncertainError(error));
+  assert.equal(h.lock().state, 'uncertain');
+  assert.equal(h.googleWrites(), 1);
+});
 
 for (const googleStatus of [400, 401, 403, 404, 413, 429]) {
   test(`an explicitly rejected append (${googleStatus}) releases its lock without retrying`, async () => {

@@ -1053,8 +1053,9 @@ export async function appendObservationRow(
   teacher: TeacherConnection,
   observation: Omit<DriveObservation, "rowNumber">,
 ) {
-  // 교사 피드백은 R열에, 새로고침 뒤에도 유지할 마지막 수정 시각은 S열에 저장합니다.
-  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A:S`;
+  // append 범위는 값의 폭이 아니라 기존 표를 찾는 범위입니다. 선택 항목인
+  // Q/S열을 별도 표로 오인하지 않도록 항상 관찰 ID가 있는 A열을 기준으로 찾습니다.
+  const range = `${quoteSheetTitle(teacher.sheetTitle)}!A:A`;
   const query = new URLSearchParams({
     valueInputOption: "RAW",
     insertDataOption: "INSERT_ROWS",
@@ -1099,13 +1100,15 @@ export async function appendObservationRow(
           }),
         },
       ));
-      const match = /!(?:[A-Z]+)(\d+)(?::|$)/.exec(response.updates?.updatedRange || "");
-      if (match) {
-        await upsertObservationIndex(teacher, observation.id, Number(match[1])).catch((error) => {
-          // Sheets 저장은 이미 끝났습니다. 색인은 다음 단건 조회에서 복구할 수 있습니다.
-          console.warn("관찰 기록 행 색인을 저장하지 못했습니다.", error);
-        });
+      const match = /!A(\d+):S(\d+)$/.exec(response.updates?.updatedRange || "");
+      if (!match || match[1] !== match[2] || Number(match[1]) < 2) {
+        // 예상 밖 위치에 저장됐다면 사진과 잠금을 보존하고 운영자 대조를 기다립니다.
+        throw new SheetWriteUncertainError();
       }
+      await upsertObservationIndex(teacher, observation.id, Number(match[1])).catch((error) => {
+        // Sheets 저장은 이미 끝났습니다. 색인은 다음 단건 조회에서 복구할 수 있습니다.
+        console.warn("관찰 기록 행 색인을 저장하지 못했습니다.", error);
+      });
     },
   );
 }
