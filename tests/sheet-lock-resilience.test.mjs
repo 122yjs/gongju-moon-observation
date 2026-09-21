@@ -30,6 +30,8 @@ function harness({ googleStatus = 200, transportFailure = false, verificationFai
   let lock = null;
   let stored = [];
   let googleWrites = 0;
+  let versionUpdates = 0;
+  let appendIntent = null;
   let repairedReceipt = null;
   const db = { prepare(sql) {
     const statement = {
@@ -49,6 +51,7 @@ function harness({ googleStatus = 200, transportFailure = false, verificationFai
         } else if (sql.includes("SET state = 'uncertain'")) {
           if (lock?.spreadsheet_id === args[0] && lock?.owner_token === args[1]) lock.state = 'uncertain';
         } else if (sql.includes('SET expected_version = ?')) {
+          versionUpdates += 1;
           [lock.expected_version, lock.intended_version] = args;
         } else if (sql.includes('UPDATE submission_receipts')) {
           assert.match(sql, /request_id = \? AND teacher_id = \? AND status = 'processing'/);
@@ -75,6 +78,7 @@ function harness({ googleStatus = 200, transportFailure = false, verificationFai
         if (googleStatus !== 200) return Response.json({ error: { message: 'synthetic Google rejection' } }, { status: googleStatus });
         const body = JSON.parse(init.body);
         if (String(url).includes(':append')) {
+          appendIntent = { ...lock };
           // 오른쪽 선택 항목에 값이 있어도 표 탐색은 관찰 ID 열에서만 시작해야 합니다.
           if (requireColumnA) {
             assert.equal(decodeURIComponent(new URL(url).pathname.split('/values/')[1]), "'관찰'!A:A:append");
@@ -102,6 +106,7 @@ function harness({ googleStatus = 200, transportFailure = false, verificationFai
     lock: () => lock, setLock: (value) => { lock = value; },
     clearStored: () => { stored = []; },
     googleWrites: () => googleWrites, repairedReceipt: () => repairedReceipt,
+    versionUpdates: () => versionUpdates, appendIntent: () => appendIntent,
     append: () => drive.appendObservationRow('synthetic-token', teacher, observation),
     recover: () => drive.recoverSheetWriteLock('synthetic-token', teacher),
   };
@@ -110,6 +115,16 @@ function harness({ googleStatus = 200, transportFailure = false, verificationFai
 test('새 관찰은 A열을 기준으로 찾고 19개 열을 모두 저장한다', async () => {
   const h = harness({ requireColumnA: true });
   await h.append();
+  assert.equal(h.lock(), null);
+});
+
+test('새 제출은 중복 버전 UPDATE 없이 복구에 필요한 버전을 Google 쓰기 전에 저장한다', async () => {
+  const h = harness();
+  await h.append();
+  assert.equal(h.versionUpdates(), 0);
+  assert.equal(h.appendIntent().expected_version, null);
+  assert.equal(h.appendIntent().observation_id, h.observation.id);
+  assert.equal(h.appendIntent().intended_version, await h.drive.observationVersion({ ...h.observation, rowNumber: 0 }));
   assert.equal(h.lock(), null);
 });
 

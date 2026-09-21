@@ -675,15 +675,12 @@ export async function reserveSubmission(
 ): Promise<SubmissionReceipt> {
   const db = getEnv().DB;
   const now = new Date();
-  await db.prepare("DELETE FROM submission_receipts WHERE expires_at < ?")
-    .bind(now.toISOString())
-    .run();
 
   const readExisting = async () => {
     const row = await db.prepare(
-      "SELECT request_id, teacher_id, observation_id, status FROM submission_receipts WHERE request_id = ? LIMIT 1",
+      "SELECT request_id, teacher_id, observation_id, status FROM submission_receipts WHERE request_id = ? AND expires_at >= ? LIMIT 1",
     )
-      .bind(requestId)
+      .bind(requestId, now.toISOString())
       .first<{
         request_id: string;
         teacher_id: string;
@@ -705,13 +702,27 @@ export async function reserveSubmission(
   if (existing) return existing;
   const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
   try {
-    await db.prepare(
+    // 정기 청소가 지연되어도 만료된 요청 ID만 원자적으로 재사용합니다.
+    // 동시에 도착한 요청은 실제로 행을 쓴 한 요청만 예약 소유자가 됩니다.
+    const result = await db.prepare(
       `INSERT INTO submission_receipts
         (request_id, teacher_id, observation_id, status, created_at, expires_at)
-       VALUES (?, ?, NULL, 'processing', ?, ?)`,
+       VALUES (?, ?, NULL, 'processing', ?, ?)
+       ON CONFLICT(request_id) DO UPDATE SET
+         teacher_id = excluded.teacher_id,
+         observation_id = NULL,
+         status = 'processing',
+         created_at = excluded.created_at,
+         expires_at = excluded.expires_at
+       WHERE submission_receipts.expires_at < excluded.created_at`,
     )
       .bind(requestId, teacherId, now.toISOString(), expiresAt)
       .run();
+    if (result.meta.changes !== 1) {
+      const raced = await readExisting();
+      if (raced) return raced;
+      throw new HttpError(409, "제출 요청 상태를 다시 확인해 주세요.");
+    }
   } catch (error) {
     const raced = await readExisting();
     if (raced) return raced;
@@ -747,9 +758,6 @@ export async function enforceSubmissionRateLimit(teacherId: string, sessionId: s
   const now = new Date();
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
   const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000).toISOString();
-  await db.prepare("DELETE FROM submission_events WHERE expires_at < ?")
-    .bind(now.toISOString())
-    .run();
   const [device, teacher] = await Promise.all([
     db.prepare(
       "SELECT COUNT(*) AS count FROM submission_events WHERE teacher_id = ? AND session_id = ? AND created_at >= ?",
@@ -788,7 +796,7 @@ export async function seedImageTickets(
   if (items.length === 0) return;
   const db = getEnv().DB;
   const now = new Date();
-  await db.prepare("DELETE FROM image_tickets WHERE expires_at < ?").bind(now.toISOString()).run();
+  // 공개 상태가 오래 남지 않도록 30분 재확인은 유지합니다. 전체 청소는 정기 작업이 담당합니다.
   const expiresAt = new Date(now.getTime() + 30 * 60 * 1000).toISOString();
   await db.batch(
     items.map((item) =>
@@ -797,15 +805,15 @@ export async function seedImageTickets(
           (observation_id, teacher_id, file_id, image_type, status, expires_at)
          VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(observation_id) DO UPDATE SET
-           teacher_id = excluded.teacher_id,
            file_id = excluded.file_id,
            image_type = excluded.image_type,
            status = excluded.status,
            expires_at = excluded.expires_at
-         WHERE image_tickets.teacher_id != excluded.teacher_id
-            OR image_tickets.file_id != excluded.file_id
+         WHERE image_tickets.teacher_id = excluded.teacher_id
+           AND (image_tickets.file_id != excluded.file_id
             OR image_tickets.image_type != excluded.image_type
-            OR image_tickets.status != excluded.status`,
+            OR image_tickets.status != excluded.status
+            OR image_tickets.expires_at < ?)`,
       ).bind(
         item.observationId,
         teacherId,
@@ -813,6 +821,7 @@ export async function seedImageTickets(
         item.imageType,
         item.status,
         expiresAt,
+        now.toISOString(),
       ),
     ),
   );

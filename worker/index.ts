@@ -1,6 +1,7 @@
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { cleanupExpiredTransientData } from "../lib/d1-maintenance";
 
 interface Env {
   ASSETS: Fetcher;
@@ -34,6 +35,10 @@ async function studentHtml(request: Request, env: Env) {
 }
 
 const worker = {
+  async scheduled(_controller: unknown, env: Env): Promise<void> {
+    await cleanupExpiredTransientData(env.DB);
+  },
+
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     let response: Response;

@@ -77,7 +77,7 @@ export async function GET(request: Request) {
         status: item.status,
       })),
     ).catch(() => {
-      // The authenticated Sheet read is authoritative; preview-cache writes are optional.
+      // 시트 원본 조회가 성공했으므로 임시정보 쓰기 실패만으로 목록을 막지 않습니다.
       console.warn("갤러리 미리보기 임시정보를 저장하지 못했습니다. 시트 기록으로 사진을 조회합니다.");
     });
 
@@ -193,8 +193,8 @@ export async function POST(request: Request) {
         status: "visible",
       },
     ]).catch(() => {
-      // Drive and Sheets are already committed. Gallery reads regenerate tickets;
-      // an optional preview-ticket failure must not report a failed submission.
+      // Drive와 Sheets 저장은 끝났습니다. 사진 조회에서 전달표를 복구할 수 있으므로
+      // 임시정보 저장 실패를 학생 제출 실패로 바꾸지 않습니다.
       console.warn("제출은 저장되었지만 갤러리 미리보기 준비를 완료하지 못했습니다.");
     });
     return json(

@@ -1067,7 +1067,7 @@ export async function appendObservationRow(
     teacher,
     { operation: "append", observationId: observation.id, intendedVersion },
     async (guard) => {
-      await guard.setVersions(null, intendedVersion);
+      // 복구에 필요한 버전은 잠금 생성 시 이미 저장했습니다.
       const response = await guard.writeGoogle(() => googleJson<AppendResponse>(
         `${SHEETS_API}/spreadsheets/${encodeURIComponent(teacher.spreadsheetId)}/values/${encodeURIComponent(range)}:append?${query}`,
         accessToken,
