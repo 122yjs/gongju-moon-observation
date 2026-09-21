@@ -22,6 +22,7 @@ const MAX_SHEET_ROWS = 2000;
 const SUMMARY_SHEET_TITLE = "제출 목록";
 const SUMMARY_PROTECTION_DESCRIPTION = "앱이 자동으로 관리하는 읽기 전용 제출 목록";
 export const SHEET_SCHEMA_VERSION = 2;
+const STALE_APPEND_CONFIRM_AFTER_MS = 5 * 60 * 1000;
 
 interface OAuthTokenResponse {
   access_token: string;
@@ -214,6 +215,7 @@ interface SheetWriteLockRow {
   expected_version: string | null;
   intended_version: string | null;
   state: "active" | "uncertain";
+  created_at: string;
 }
 
 export interface SheetWriteGuard {
@@ -237,7 +239,7 @@ export function isSheetWriteUncertainError(error: unknown): error is SheetWriteU
 async function readSheetWriteLock(spreadsheetId: string) {
   return getEnv().DB.prepare(
     `SELECT spreadsheet_id, teacher_id, owner_token, operation, observation_id,
-            expected_version, intended_version, state
+            expected_version, intended_version, state, created_at
        FROM sheet_write_locks
       WHERE spreadsheet_id = ?
       LIMIT 1`,
@@ -260,30 +262,39 @@ export async function withSheetWriteLock<T>(
   action: (guard: SheetWriteGuard) => Promise<T>,
 ) {
   const ownerToken = crypto.randomUUID();
-  await getEnv().DB.prepare(
-    `INSERT INTO sheet_write_locks (
-       spreadsheet_id, teacher_id, owner_token, operation, observation_id,
-       expected_version, intended_version, state, created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)
-     ON CONFLICT(spreadsheet_id) DO NOTHING`,
-  )
-    .bind(
-      teacher.spreadsheetId,
-      teacher.id || null,
-      ownerToken,
-      intent.operation,
-      intent.observationId || null,
-      intent.expectedVersion || null,
-      intent.intendedVersion || null,
-      new Date().toISOString(),
+  let acquired: SheetWriteLockRow | null;
+  try {
+    await getEnv().DB.prepare(
+      `INSERT INTO sheet_write_locks (
+         spreadsheet_id, teacher_id, owner_token, operation, observation_id,
+         expected_version, intended_version, state, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)
+       ON CONFLICT(spreadsheet_id) DO NOTHING`,
     )
-    .run();
-  const acquired = await readSheetWriteLock(teacher.spreadsheetId);
+      .bind(
+        teacher.spreadsheetId,
+        teacher.id || null,
+        ownerToken,
+        intent.operation,
+        intent.observationId || null,
+        intent.expectedVersion || null,
+        intent.intendedVersion || null,
+        new Date().toISOString(),
+      )
+      .run();
+    acquired = await readSheetWriteLock(teacher.spreadsheetId);
+  } catch (error) {
+    // No Google write has started. Remove only this attempt's token, even if
+    // INSERT succeeded but its response or the verification read was lost.
+    await releaseSheetWriteLock(teacher.spreadsheetId, ownerToken).catch(() => undefined);
+    throw error;
+  }
   if (acquired?.owner_token !== ownerToken) {
     throw new HttpError(409, "Google Sheets 변경을 확인 중입니다. 시트 연결 점검 후 다시 시도해 주세요.");
   }
 
   let googleWriteAttempted = false;
+  let googleWriteAttempts = 0;
   let uncertain = false;
   const markUncertain = async () => {
     // 먼저 메모리에 표시합니다. D1 응답 자체가 끊겨도 finally에서 잠금을 풀면 안 됩니다.
@@ -305,9 +316,19 @@ export async function withSheetWriteLock<T>(
     },
     async writeGoogle<TValue>(write: () => Promise<TValue>) {
       googleWriteAttempted = true;
+      googleWriteAttempts += 1;
       try {
         return await write();
-      } catch {
+      } catch (error) {
+        // A single atomic append explicitly rejected by Google did not change
+        // the Sheet. Do not turn quota/auth/validation rejection into a permanent
+        // class lock. Never apply this to timeouts, 5xx, or multi-step operations.
+        if (intent.operation === "append" && googleWriteAttempts === 1
+          && error instanceof GoogleRequestError
+          && [400, 401, 403, 404, 413, 429].includes(error.googleStatus)) {
+          googleWriteAttempted = false;
+          throw error;
+        }
         await markUncertain().catch(() => undefined);
         throw new SheetWriteUncertainError();
       }
@@ -407,6 +428,12 @@ async function readGooglePayload(response: Response) {
   }
 }
 
+class GoogleRequestError extends HttpError {
+  constructor(readonly googleStatus: number, message: string) {
+    super(googleStatus >= 500 ? 502 : googleStatus, message);
+  }
+}
+
 async function googleFetch(
   url: string,
   accessToken: string,
@@ -418,7 +445,7 @@ async function googleFetch(
   const response = await fetch(url, { ...init, headers });
   if (!response.ok && !allowedStatuses.includes(response.status)) {
     const payload = await readGooglePayload(response);
-    throw new HttpError(response.status >= 500 ? 502 : response.status, normalizeGoogleError(payload, response.status));
+    throw new GoogleRequestError(response.status, normalizeGoogleError(payload, response.status));
   }
   return response;
 }
@@ -1215,7 +1242,7 @@ export async function findObservationRow(
   teacher: TeacherConnection,
   observationId: string,
 ) {
-  const cachedRowNumber = await getObservationIndex(teacher.id, observationId);
+  const cachedRowNumber = await getObservationIndex(teacher.id, observationId).catch(() => null);
   if (cachedRowNumber) {
     const cached = await readObservationRowAt(accessToken, teacher, cachedRowNumber);
     if (cached?.id === observationId) return cached;
@@ -1236,9 +1263,11 @@ export async function findObservationRow(
     }
   }
   if (found) {
-    await upsertObservationIndex(teacher, observationId, found.rowNumber);
+    await upsertObservationIndex(teacher, observationId, found.rowNumber).catch(() => {
+      console.warn("관찰 기록 행 색인을 갱신하지 못했습니다. 확인된 시트 기록을 사용합니다.");
+    });
   } else {
-    await deleteObservationIndex(teacher.id, observationId);
+    await deleteObservationIndex(teacher.id, observationId).catch(() => undefined);
   }
   return found;
 }
@@ -1248,8 +1277,14 @@ export async function recoverSheetWriteLock(accessToken: string, teacher: Teache
   if (!lock) return { recovered: false as const };
 
   if (lock.state === "active") {
-    // 실행 중 요청과 프로세스 중단을 D1만으로 구별할 수 없으므로 자동 해제하지 않습니다.
-    throw new HttpError(409, "시트 변경 요청이 진행 중이거나 비정상 종료되었습니다. 운영자 확인이 필요합니다.");
+    const age = Date.now() - new Date(lock.created_at).getTime();
+    const canVerifyAppend = lock.operation === "append" && lock.teacher_id === teacher.id
+      && lock.observation_id && lock.intended_version && age >= STALE_APPEND_CONFIRM_AFTER_MS;
+    // Age permits verification, NEVER automatic expiry. A single append has no
+    // later Google mutation once its exact persisted version is visible below.
+    if (!canVerifyAppend) {
+      throw new HttpError(409, "시트 변경 요청이 진행 중이거나 비정상 종료되었습니다. 운영자 확인이 필요합니다.");
+    }
   }
 
   if (lock.observation_id) {
@@ -1263,6 +1298,14 @@ export async function recoverSheetWriteLock(accessToken: string, teacher: Teache
     }
     if (lock.operation === "delete-observation" && applied) {
       await clearObservationIndexes(teacher.id);
+    }
+    if (lock.operation === "append" && current) {
+      // Repair only an existing receipt for this class and this request before
+      // unlocking. A retry then returns the saved ID instead of uploading twice.
+      await getEnv().DB.prepare(
+        `UPDATE submission_receipts SET observation_id = ?, status = 'completed'
+          WHERE request_id = ? AND teacher_id = ? AND status = 'processing'`,
+      ).bind(current.id, current.requestId, teacher.id).run();
     }
     await releaseSheetWriteLock(teacher.spreadsheetId, lock.owner_token);
     return { recovered: true as const, operation: lock.operation, outcome: "applied" as const };

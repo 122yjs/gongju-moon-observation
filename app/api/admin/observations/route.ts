@@ -48,7 +48,9 @@ export async function GET(request: Request) {
         imageType: item.imageType,
         status: item.status,
       })),
-    );
+    ).catch(() => {
+      console.warn("교사 갤러리 미리보기 임시정보를 저장하지 못했습니다. 시트 기록으로 사진을 조회합니다.");
+    });
     const items = await Promise.all(page.items.map(async (item) => ({
         id: item.id,
         version: await observationVersion(item),

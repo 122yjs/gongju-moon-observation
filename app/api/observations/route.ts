@@ -76,7 +76,10 @@ export async function GET(request: Request) {
         imageType: item.imageType,
         status: item.status,
       })),
-    );
+    ).catch(() => {
+      // The authenticated Sheet read is authoritative; preview-cache writes are optional.
+      console.warn("갤러리 미리보기 임시정보를 저장하지 못했습니다. 시트 기록으로 사진을 조회합니다.");
+    });
 
     const viewer = await getHeartViewer(request, teacher.id);
     const hearts = await getHeartStates(
