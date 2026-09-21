@@ -1,9 +1,10 @@
 import { clearTeacherCookie, getTeacherSession } from "../../../../lib/auth";
-import { revokeGoogleToken } from "../../../../lib/google-drive";
+import { revokeGoogleToken, withSheetWriteLocks } from "../../../../lib/google-drive";
 import { assertSameOrigin, errorResponse, HttpError, json } from "../../../../lib/http";
 import {
   deleteTeacherAccount,
   getTeacherById,
+  listTeacherConnections,
   revealRefreshToken,
 } from "../../../../lib/tenant";
 
@@ -15,8 +16,18 @@ export async function DELETE(request: Request) {
     const teacher = await getTeacherById(session.teacherId);
     if (teacher) {
       const refreshToken = await revealRefreshToken(teacher);
-      await revokeGoogleToken(refreshToken);
-      await deleteTeacherAccount(teacher.accountId);
+      const teachers = await listTeacherConnections(teacher.accountId);
+      await withSheetWriteLocks(teachers, "disconnect", async (guards) => {
+        const revokeAndDelete = async (index: number): Promise<void> => {
+          if (index >= guards.length) {
+            await revokeGoogleToken(refreshToken);
+            await deleteTeacherAccount(teacher.accountId);
+            return;
+          }
+          await guards[index].writeGoogle(() => revokeAndDelete(index + 1));
+        };
+        await revokeAndDelete(0);
+      });
     }
     return json(
       {

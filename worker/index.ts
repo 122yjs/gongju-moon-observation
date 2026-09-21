@@ -53,7 +53,14 @@ const worker = {
     } else if (url.pathname === "/" || url.pathname === "/index.html") {
       response = await studentHtml(request, env);
     } else {
-      response = await handler.fetch(request, env, ctx);
+      const handled = handler.fetch(request, env, ctx);
+      if (url.pathname.startsWith("/api/") && ["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) {
+        // Keep the SAME mutation alive briefly after a mobile disconnect so its
+        // receipt/lock cleanup can finish. This is bounded by Workers' 30-second
+        // post-disconnect limit, not a durable queue or an early success response.
+        ctx.waitUntil(handled.then(() => undefined, () => undefined));
+      }
+      response = await handled;
     }
 
     const headers = new Headers(response.headers);

@@ -49,6 +49,8 @@ export interface TeacherConnection {
   spreadsheetId: string;
   sheetId: number;
   sheetTitle: string;
+  summarySheetId: number | null;
+  sheetSchemaVersion: number;
   inviteTokenHash: string;
   inviteTokenCiphertext: string;
   classLabel: string;
@@ -102,6 +104,8 @@ interface TeacherRow {
   spreadsheet_id: string;
   sheet_id: number;
   sheet_title: string;
+  summary_sheet_id?: number | null;
+  sheet_schema_version?: number | null;
   invite_token_hash: string;
   invite_token_ciphertext: string;
   class_label: string;
@@ -170,6 +174,8 @@ function mapTeacher(row: TeacherRow): TeacherConnection {
     spreadsheetId: row.spreadsheet_id,
     sheetId: Number(row.sheet_id || 0),
     sheetTitle: row.sheet_title || "관찰 기록",
+    summarySheetId: Number.isInteger(row.summary_sheet_id) ? Number(row.summary_sheet_id) : null,
+    sheetSchemaVersion: Number(row.sheet_schema_version || 0),
     inviteTokenHash: row.invite_token_hash,
     inviteTokenCiphertext: row.invite_token_ciphertext,
     classLabel: row.class_label,
@@ -330,7 +336,7 @@ export async function getFirstTeacherByAccountId(accountId: string) {
   return row ? getTeacherById(row.id) : null;
 }
 
-export async function listTeacherClasses(accountId: string) {
+export async function listTeacherClasses(accountId: string): Promise<TeacherClassSummary[]> {
   const rows = await getEnv().DB.prepare(
     `SELECT id, class_label, root_folder_id, spreadsheet_id, created_at, updated_at
        FROM teacher_connections
@@ -340,6 +346,12 @@ export async function listTeacherClasses(accountId: string) {
     .bind(accountId)
     .all<TeacherClassRow>();
   return (rows.results || []).map(mapClass);
+}
+
+export async function listTeacherConnections(accountId: string): Promise<TeacherConnection[]> {
+  const classes = await listTeacherClasses(accountId);
+  const teachers = await Promise.all(classes.map((teacherClass) => getTeacherById(teacherClass.id)));
+  return teachers.filter((teacher): teacher is TeacherConnection => Boolean(teacher));
 }
 
 export async function createTeacherAccount(input: {
@@ -492,6 +504,8 @@ export async function createTeacherClass(input: {
   spreadsheetId: string;
   sheetId: number;
   sheetTitle: string;
+  summarySheetId: number;
+  sheetSchemaVersion: number;
   inviteToken: string;
   inviteTokenHash: string;
   classLabel: string;
@@ -505,8 +519,9 @@ export async function createTeacherClass(input: {
        id, account_id, google_permission_id, google_email, google_display_name,
        refresh_token_ciphertext, access_token_ciphertext, access_token_expires_at,
        root_folder_id, photos_folder_id, spreadsheet_id, sheet_id, sheet_title,
+       summary_sheet_id, sheet_schema_version,
        invite_token_hash, invite_token_ciphertext, class_label, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       id,
@@ -520,6 +535,8 @@ export async function createTeacherClass(input: {
       input.spreadsheetId,
       input.sheetId,
       input.sheetTitle,
+      input.summarySheetId,
+      input.sheetSchemaVersion,
       input.inviteTokenHash,
       inviteTokenCiphertext,
       input.classLabel,
@@ -530,6 +547,29 @@ export async function createTeacherClass(input: {
   const teacher = await getTeacherById(id);
   if (!teacher) throw new Error("반 연결 정보를 생성하지 못했습니다.");
   return teacher;
+}
+
+export async function updateTeacherSheetSchema(
+  teacherId: string,
+  sheetTitle: string,
+  summarySheetId: number,
+  sheetSchemaVersion: number,
+) {
+  await getEnv().DB.prepare(
+    `UPDATE teacher_connections
+        SET sheet_title = ?, summary_sheet_id = ?, sheet_schema_version = ?, updated_at = ?
+      WHERE id = ?`,
+  )
+    .bind(sheetTitle, summarySheetId, sheetSchemaVersion, new Date().toISOString(), teacherId)
+    .run();
+}
+
+export async function updateTeacherSheetTitle(teacherId: string, sheetTitle: string) {
+  await getEnv().DB.prepare(
+    "UPDATE teacher_connections SET sheet_title = ?, updated_at = ? WHERE id = ?",
+  )
+    .bind(sheetTitle, new Date().toISOString(), teacherId)
+    .run();
 }
 
 export async function updateTeacherAccessToken(
@@ -594,6 +634,8 @@ export async function deleteTeacherAccount(accountId: string) {
   const classes = await listTeacherClasses(accountId);
   const db = getEnv().DB;
   const statements = classes.flatMap((teacherClass) => [
+    db.prepare("DELETE FROM observation_row_index WHERE teacher_id = ?").bind(teacherClass.id),
+    db.prepare("DELETE FROM sheet_write_locks WHERE spreadsheet_id = ?").bind(teacherClass.spreadsheetId),
     db.prepare("DELETE FROM image_tickets WHERE teacher_id = ?").bind(teacherClass.id),
     db.prepare("DELETE FROM observation_hearts WHERE class_id = ?").bind(teacherClass.id),
     db.prepare("DELETE FROM submission_events WHERE teacher_id = ?").bind(teacherClass.id),
@@ -609,6 +651,8 @@ export async function deleteTeacherAccount(accountId: string) {
 export async function deleteTeacherClass(teacherId: string) {
   const db = getEnv().DB;
   await db.batch([
+    db.prepare("DELETE FROM observation_row_index WHERE teacher_id = ?").bind(teacherId),
+    db.prepare("DELETE FROM sheet_write_locks WHERE teacher_id = ?").bind(teacherId),
     db.prepare("DELETE FROM image_tickets WHERE teacher_id = ?").bind(teacherId),
     db.prepare("DELETE FROM observation_hearts WHERE class_id = ?").bind(teacherId),
     db.prepare("DELETE FROM submission_events WHERE teacher_id = ?").bind(teacherId),

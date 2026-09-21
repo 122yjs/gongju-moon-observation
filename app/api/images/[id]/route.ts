@@ -26,7 +26,8 @@ export async function GET(
     if (!teacher) throw new HttpError(401, "수업 연결이 만료되었습니다.");
     const accessToken = await getTeacherAccessToken(teacher);
 
-    let ticket = await getImageTicket(id, teacher.id);
+    // A cache miss/error must still pass the same class-scoped Sheet and Drive checks.
+    let ticket = await getImageTicket(id, teacher.id).catch(() => null);
     if (!ticket) {
       const observation = await findObservationRow(accessToken, teacher, id);
       if (!observation) throw new HttpError(404, "사진을 찾을 수 없습니다.");
@@ -42,7 +43,9 @@ export async function GET(
           imageType: observation.imageType,
           status: observation.status,
         },
-      ]);
+      ]).catch(() => {
+        console.warn("사진 미리보기 임시정보를 갱신하지 못했습니다. 확인된 원본 사진을 표시합니다.");
+      });
     }
     if (!teacherSession && ticket.status !== "visible") {
       throw new HttpError(404, "사진을 찾을 수 없습니다.");

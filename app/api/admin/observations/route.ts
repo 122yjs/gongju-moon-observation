@@ -1,5 +1,11 @@
 import { getTeacherSession } from "../../../../lib/auth";
-import { ensureTeacherSummarySheet, getTeacherAccessToken, listObservationRows } from "../../../../lib/google-drive";
+import {
+  ensureTeacherSummarySheet,
+  getTeacherAccessToken,
+  listObservationRows,
+  observationVersion,
+  SHEET_SCHEMA_VERSION,
+} from "../../../../lib/google-drive";
 import { getHeartStates, getHeartViewer } from "../../../../lib/hearts";
 import { errorResponse, HttpError, json } from "../../../../lib/http";
 import { decodeCursor, encodeCursor } from "../../../../lib/observations";
@@ -9,16 +15,19 @@ export async function GET(request: Request) {
   try {
     const session = await getTeacherSession(request);
     if (!session?.teacherId) throw new HttpError(401, "교사 로그인이 필요합니다.");
-    const teacher = await getTeacherById(session.teacherId);
+    let teacher = await getTeacherById(session.teacherId);
     if (!teacher) throw new HttpError(401, "Google Drive를 다시 연결해 주세요.");
     const url = new URL(request.url);
     const cursorValue = url.searchParams.get("cursor");
     const cursor = decodeCursor(cursorValue);
     if (cursorValue && !cursor) throw new HttpError(400, "이어보기 정보가 올바르지 않습니다.");
     const accessToken = await getTeacherAccessToken(teacher);
-    await ensureTeacherSummarySheet(accessToken, teacher).catch((error) => {
-      console.warn("기존 Google Sheets 시간 열을 최신 형식으로 맞추지 못했습니다.", error);
-    });
+    if (teacher.sheetSchemaVersion < SHEET_SCHEMA_VERSION || !Number.isInteger(teacher.summarySheetId)) {
+      await ensureTeacherSummarySheet(accessToken, teacher);
+      const refreshed = await getTeacherById(teacher.id);
+      if (!refreshed) throw new HttpError(401, "Google Drive를 다시 연결해 주세요.");
+      teacher = refreshed;
+    }
     const page = await listObservationRows(accessToken, teacher, {
       limit: 30,
       cursor,
@@ -39,10 +48,13 @@ export async function GET(request: Request) {
         imageType: item.imageType,
         status: item.status,
       })),
-    );
-    return json({
-      items: page.items.map((item) => ({
+    ).catch(() => {
+      console.warn("교사 갤러리 미리보기 임시정보를 저장하지 못했습니다. 시트 기록으로 사진을 조회합니다.");
+    });
+    const items = await Promise.all(page.items.map(async (item) => ({
         id: item.id,
+        version: await observationVersion(item),
+        updatedAt: item.updatedAt,
         studentNumber: item.studentNumber,
         studentName: item.studentName,
         observedAt: item.observedAt,
@@ -59,7 +71,9 @@ export async function GET(request: Request) {
         teacherFeedback: item.teacherFeedback,
         heartCount: hearts[item.id]?.heartCount ?? 0,
         hearted: hearts[item.id]?.hearted ?? false,
-      })),
+      })));
+    return json({
+      items,
       total: page.total,
       hasMore: page.hasMore,
       nextCursor: page.nextCursor

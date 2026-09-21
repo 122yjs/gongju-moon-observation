@@ -3,6 +3,7 @@ import {
   appendObservationRow,
   deleteDriveFile,
   getTeacherAccessToken,
+  isSheetWriteUncertainError,
   listObservationRows,
   uploadObservationPhoto,
 } from "../../../lib/google-drive";
@@ -75,7 +76,10 @@ export async function GET(request: Request) {
         imageType: item.imageType,
         status: item.status,
       })),
-    );
+    ).catch(() => {
+      // The authenticated Sheet read is authoritative; preview-cache writes are optional.
+      console.warn("갤러리 미리보기 임시정보를 저장하지 못했습니다. 시트 기록으로 사진을 조회합니다.");
+    });
 
     const viewer = await getHeartViewer(request, teacher.id);
     const hearts = await getHeartStates(
@@ -167,11 +171,14 @@ export async function POST(request: Request) {
         imageBytes: bytes.byteLength,
         status: "visible",
         createdAt,
+        updatedAt: createdAt,
         imageWebViewUrl: uploaded.webViewLink,
       });
     } catch (error) {
-      await deleteDriveFile(accessToken, uploaded.id).catch(() => undefined);
-      uploadedFileId = null;
+      if (!isSheetWriteUncertainError(error)) {
+        await deleteDriveFile(accessToken, uploaded.id).catch(() => undefined);
+        uploadedFileId = null;
+      }
       throw error;
     }
 

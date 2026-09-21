@@ -33,6 +33,7 @@ function harness(overrides = {}) {
     getTeacherAccessToken: async () => 'synthetic-test-token',
     uploadObservationPhoto: async () => { calls.push(['upload']); return { id: 'test-file', webViewLink: 'test-link' }; },
     appendObservationRow: async () => { calls.push(['append']); },
+    isSheetWriteUncertainError: (error) => error?.sheetWriteUncertain === true,
     deleteDriveFile: async (_token, id) => { calls.push(['delete', id]); },
     completeSubmission: async () => { calls.push(['complete']); },
     seedImageTickets: async () => { calls.push(['tickets']); },
@@ -96,6 +97,13 @@ test('a failed Sheets append retains the existing cleanup of the newly uploaded 
   const h = harness({ appendObservationRow: async () => { throw Error('append failed'); } });
   assert.equal((await h.post()).status, 500);
   assert.deepEqual(h.calls, [['rate'], ['upload'], ['delete', 'test-file'], ['release', 'test-request']]);
+});
+
+test('a lock release failure after append never deletes an already saved photo', async () => {
+  const uncertain = Object.assign(new Error('lock release failed'), { sheetWriteUncertain: true });
+  const h = harness({ appendObservationRow: async () => { h.calls.push(['append']); throw uncertain; } });
+  assert.equal((await h.post()).status, 500);
+  assert.deepEqual(h.calls, [['rate'], ['upload'], ['append']]);
 });
 
 test('a new submission passes the available photo capture time into the teacher Sheet record', async () => {

@@ -6,6 +6,7 @@ import {
   getTeacherAccessToken,
   initializeTeacherDrive,
   listObservationRows,
+  withSheetWriteLocks,
 } from "../../../../lib/google-drive";
 import { assertSameOrigin, errorResponse, HttpError, json } from "../../../../lib/http";
 import {
@@ -139,20 +140,22 @@ export async function DELETE(request: Request) {
       throw new HttpError(404, "같은 Google 계정의 반을 찾지 못했습니다.");
     }
     const accessToken = await getTeacherAccessToken(teacher);
-    const observations = await listObservationRows(accessToken, target, {
-      limit: 2000,
-      cursor: null,
-      includeHidden: true,
-    }).catch(() => ({ items: [] }));
-    await Promise.all(
-      observations.items.map((item) =>
-        deleteDriveFile(accessToken, item.imageFileId).catch(() => undefined),
-      ),
-    );
-    await deleteDriveFile(accessToken, target.spreadsheetId).catch(() => undefined);
-    await deleteDriveFile(accessToken, target.photosFolderId).catch(() => undefined);
-    await deleteDriveFile(accessToken, target.rootFolderId);
-    await deleteTeacherClass(target.id);
+    await withSheetWriteLocks([target], "delete-class", async ([guard]) => {
+      const observations = await listObservationRows(accessToken, target, {
+        limit: 2000,
+        cursor: null,
+        includeHidden: true,
+      }).catch(() => ({ items: [] }));
+      await guard.writeGoogle(async () => {
+        await Promise.all(observations.items.map((item) =>
+          deleteDriveFile(accessToken, item.imageFileId).catch(() => undefined),
+        ));
+        await deleteDriveFile(accessToken, target.spreadsheetId).catch(() => undefined);
+        await deleteDriveFile(accessToken, target.photosFolderId).catch(() => undefined);
+        await deleteDriveFile(accessToken, target.rootFolderId);
+      });
+      await deleteTeacherClass(target.id);
+    });
     const activeClassId = target.id === teacher.id
       ? classes.find((teacherClass) => teacherClass.id !== target.id)?.id
       : teacher.id;
