@@ -160,7 +160,7 @@ test("opens a protected Korean-time summary while preserving the raw observation
   assert.match(drive, /updateObservationObservedAt/);
   assert.match(drive, /!N\$\{observation\.rowNumber\}:P\$\{observation\.rowNumber\}/);
 
-  assert.match(drive, /const range = `\$\{quoteSheetTitle\(teacher\.sheetTitle\)\}!A:S`/);
+  assert.match(drive, /const range = `\$\{quoteSheetTitle\(teacher\.sheetTitle\)\}!A:A`/);
   assert.match(drive, /sheetId: teacher\.sheetId/);
   assert.match(drive, /sheetTitle,\s*\n\s*summarySheetId,\s*\n\s*sheetSchemaVersion: SHEET_SCHEMA_VERSION/);
 
